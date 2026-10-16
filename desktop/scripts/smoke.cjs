@@ -331,7 +331,7 @@ const root = path.resolve(__dirname, '../..');
     // actual navigation before checking one event window per profile.
     await reopened.waitForFunction(async url => { const state = await desktopBridge.checkout(); return state.tabs.filter(tab => tab.url === url).length === 16 && state.tabs.filter(tab => tab.url === url).every(tab => !tab.loading); }, eventUrl);
     const loaded = await reopened.evaluate(() => desktopBridge.checkout());
-    for (const profile of loaded.profiles) assert.equal(loaded.tabs.filter(tab => tab.profileId === profile.id && tab.url === eventUrl).length, 1);
+    for (const profile of loaded.profiles) assert.equal(loaded.tabs.filter(tab => tab.profileId === profile.id && tab.url === eventUrl).length, 1, JSON.stringify({ profile, profiles: loaded.profiles, launch: loaded.launch, tabs: loaded.tabs.map(({ id, profileId, url, loading, error }) => ({ id, profileId, url, loading, error })) }));
     assert.equal(restoredSite.url(), 'http://127.0.0.1:8080/checkout.html');
     assert.equal(await restoredSite.locator('input[placeholder="Nome Completo"]').inputValue(), 'Carrinho preservado');
     const cookies = await instance.evaluate(async ({ webContents }, { tabs, url }) => Promise.all(tabs.map(async tab => ({ profileId: tab.profileId, cookies: await webContents.fromId(tab.id).session.cookies.get({ url }) }))), { tabs: loaded.tabs.filter(tab => tab.url === eventUrl), url: eventUrl });

@@ -35,6 +35,8 @@ test('migra cofre 0.2, salva CVV só por opção e mantém CVV, limite e histór
   await wallet.saveCard(oldId, 'Principal', card, { saveCvv: true, available: '1.000,00' });
   assert.equal(wallet.cards()[0].values.cardCvv, '987');
   assert.equal(wallet.summary(oldId).available, 100000);
+  await assert.rejects(wallet.saveCard('', 'Mesmo cartão com outro nome', card, { available: '1.000,00' }), /já está cadastrado/);
+  assert.equal(wallet.cards().length, 1);
   const disk = await fs.readFile(store.filename, 'utf8');
   for (const value of ['0000000000001111', 'cardCvv', 'budgetCents', 'PESSOA TESTE', password]) assert.equal(disk.includes(value), false);
   await wallet.lock(); const reopened = new Wallet(storage); await reopened.unlock(password);

@@ -74,3 +74,18 @@ test('sessão expira mesmo sem a interface aberta', async () => {
     assert.deepEqual(await fs.readdir(directory), []);
   } finally { store.close(); await fs.rm(directory, { recursive: true, force: true }); }
 });
+test('timer que dispara antes do prazo é reagendado e a sessão expira sem nova leitura', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'meaple-early-timer-'));
+  let done;
+  const expired = new Promise(resolve => { done = resolve; });
+  const store = new Store(directory, done);
+  let deadline;
+  try {
+    await store.update('session', { checkoutVaultSession: { salt: 'YWJj', key: 'YWJj', expiresAt: Date.now() + 100 } });
+    // Simulate the scheduled timer having fired before its wall-clock deadline.
+    clearTimeout(store.timer);
+    store.expire();
+    await Promise.race([expired, new Promise((_resolve, reject) => { deadline = setTimeout(() => reject(new Error('Sessão não expirou automaticamente.')), 2000); })]);
+    assert.deepEqual(store.session, {});
+  } finally { clearTimeout(deadline); store.close(); await fs.rm(directory, { recursive: true, force: true }); }
+});

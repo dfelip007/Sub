@@ -39,6 +39,14 @@ class Store {
   }
   expire() {
     const session = this.session[SESSION_KEY];
+    // A timeout may fire just before the wall-clock deadline. Re-arm it rather
+    // than leaving the session alive until the next storage read.
+    if (session && session.expiresAt > Date.now()) {
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => this.expire(), session.expiresAt - Date.now());
+      this.timer.unref?.();
+      return;
+    }
     if (session && session.expiresAt <= Date.now()) {
       this.session = {};
       clearTimeout(this.timer);

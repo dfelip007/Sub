@@ -37,6 +37,7 @@
       if (saveCvv) selected.cardCvv = String(values.cardCvv).trim();
       const recordId = id || crypto.randomUUID();
       return this.change('cards', (cards, data) => {
+        if (cards.some(item => item.id !== recordId && item.values.cardNumber.replace(/\D/g, '') === selected.cardNumber.replace(/\D/g, ''))) throw new Error('Este número de cartão já está cadastrado. Edite o cartão existente para manter um único controle de limite.');
         const index = cards.findIndex(item => item.id === recordId);
         if (id && index < 0) throw new Error('Cartão não encontrado.');
         const budgetCents = balance == null ? null : balance + spent(data, recordId);

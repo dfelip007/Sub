@@ -23,8 +23,8 @@ Os dados selecionados são enviados somente ao formulário da Meaple quando o us
 
 ## Limites da validação
 
-- A versão foi testada em Electron real no Linux, com painel, cofre, IPC, navegador próprio e formulário local equivalente aos prints. Inclui reinício do processo, persistência criptografada, ausência de CVV e preenchimento sem finalizar compra.
-- O executável Windows é gerado neste ambiente, mas sua execução nativa precisa ser verificada no Windows. O workflow `.github/workflows/windows-desktop.yml` foi preparado para repetir os testes no Windows e gerar um artefato baixável; ele só terá resultado depois de ser executado no GitHub.
+- A versão foi testada em Electron real no Linux e no Windows, com painel, cofre, IPC, navegador próprio e formulário local equivalente aos prints. Inclui reinício do processo, persistência criptografada, ausência de CVV e preenchimento sem finalizar compra.
+- O workflow `.github/workflows/windows-desktop.yml` passou no Windows e gerou o artefato **Meaple-Windows-x64**, com executável e checksum. A execução verificada está em https://github.com/dfelip007/Sub/actions/runs/38842216817. Entre no GitHub, abra a seção **Artifacts** no fim da página, baixe o pacote e extraia o ZIP. O teste completo usa Electron antes do empacotamento; o launcher portátil gerado não foi aberto separadamente pela automação.
 - O checkout autenticado da Meaple, pagamento real e autenticação bancária não foram testados. O acesso à Meaple foi bloqueado pelo proxy do ambiente. O aplicativo usa uma sessão própria, e o site pode exigir novo login ou validação de acesso.
 - Campos em iframes de provedores de pagamento ainda exigem adaptação ao DOM real. A presença de iframe é indicada nas pendências.
 - O executável ainda não possui assinatura digital de distribuição. Não há certificado ou credencial embutidos.

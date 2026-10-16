@@ -324,11 +324,13 @@
   }
   async function lock() {
     await wallet.lock(); usages.clear(); usageVersion++;
+    const eventLink = $('event-link').value;
     ticketRequest++; draftKey = requestedKey = ''; ticketDrafts.clear(); resaleDrafts.clear(); ticketDirty = amountDirty = false;
     $('ticket-event').value = ''; ticketRows('ticket', []); $('ticket-edit-event').value = ''; ticketRows('ticket-edit', []);
     if ($('ticket-dialog').open) $('ticket-dialog').close(); editTicketOrder = '';
     $('ticket-read-state').textContent = 'Desbloqueie o cofre para ler e salvar os ingressos.';
     for (const id of ['buyer-form', 'card-form', 'checkout', 'vault-form', 'pin-form']) $(id).reset();
+    for (const input of document.querySelectorAll('[data-event-link]')) input.value = eventLink;
     for (const id of ['buyer-editor', 'card-editor']) $(id).hidden = true;
     $('import-data').value = ''; $('buyer-search').value = '';
     if ($('order-dialog').open) $('order-dialog').close();

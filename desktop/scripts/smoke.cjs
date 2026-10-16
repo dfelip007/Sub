@@ -310,7 +310,8 @@ const root = path.resolve(__dirname, '../..');
     await reopened.locator('#card-profile').selectOption({ label: 'Principal · final 1111' });
     assert.equal(await reopened.locator('#purchase-cvv').inputValue(), '');
     assert.match(await reopened.locator('#buy-balance').textContent(), /876,55/);
-    // Native expiry must clear the new UI, including an open card editor.
+    await reopened.locator('#event-link').fill('http://127.0.0.1:8080/evento/submundo?lote=1');
+    // Native expiry clears personal data but keeps the shared event link.
     await reopened.locator('.sidebar [data-view=cards]').click();
     await reopened.locator('#cards-list [data-edit-card]').click();
     assert.equal(await reopened.locator('[name=cardNumber]').inputValue(), card.cardNumber);
@@ -319,6 +320,8 @@ const root = path.resolve(__dirname, '../..');
       await desktopBridge.write('session', { checkoutVaultSession: { ...checkoutVaultSession, expiresAt: Date.now() + 80 } });
     });
     await reopened.waitForFunction(() => !document.querySelector('#vault-panel').hidden && document.querySelector('[name=cardNumber]').value === '');
+    assert.equal(await reopened.locator('#event-link').inputValue(), 'http://127.0.0.1:8080/evento/submundo?lote=1');
+    assert.equal(await reopened.locator('#browser-event-link').inputValue(), 'http://127.0.0.1:8080/evento/submundo?lote=1');
     assert.equal(await reopened.locator('[name=savedCvv]').inputValue(), '');
     assert.equal(await reopened.locator('#purchase-cvv').inputValue(), '');
     // Open one event in all 16 profiles, even with the vault locked. Existing

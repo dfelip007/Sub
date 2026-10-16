@@ -83,6 +83,43 @@
     $('vault-unlock').textContent = exists ? 'Desbloquear cofre' : 'Criar cofre e começar';
     if (unlocked) timer = setTimeout(expire, Math.max(0, wallet.expiresAt - Date.now()));
   }
+  function clockText(timer) {
+    if (!timer) return '—';
+    const hours = Math.floor(timer.seconds / 3600);
+    return `${hours ? `${String(hours).padStart(2, '0')}:` : ''}${String(Math.floor(timer.seconds / 60) % 60).padStart(2, '0')}:${String(timer.seconds % 60).padStart(2, '0')}`;
+  }
+  function urgency(timer) { return !timer ? 'unknown' : timer.seconds === 0 ? 'expired' : timer.seconds <= 120 ? 'urgent' : 'normal'; }
+  function renderTimers() {
+    const tab = state.tab, timer = tab?.timer;
+    $('cart-clock').dataset.urgency = urgency(timer);
+    $('cart-time').textContent = clockText(timer);
+    $('cart-time-state').textContent = !tab ? 'Aguardando checkout' : !timer ? tab.loading ? 'Consultando o site…' : 'Tempo não identificado' : timer.seconds === 0 ? 'Contador esgotado' : timer.seconds <= 120 ? 'Atenção: 2 minutos ou menos' : 'Tempo restante para finalizar';
+    $('cart-time-help').textContent = !tab ? 'Abra a Meaple neste perfil e avance ao checkout.' : !timer ? 'Confira o prazo na Meaple. O contador aparecerá aqui quando puder ser identificado.' : timer.seconds === 0 ? 'Confira na Meaple se o carrinho expirou antes de prosseguir.' : 'Espelha o contador da Meaple nesta janela. O prazo não é prolongado pelo programa.';
+    $('cart-overview').hidden = !state.tabs.length;
+    $('cart-overview-title').textContent = `Visão geral · ${state.tabs.length} ${state.tabs.length === 1 ? 'janela aberta' : 'janelas abertas'}`;
+    const list = $('cart-list');
+    const signature = JSON.stringify(state.tabs.map(item => [item.id, item.profileId, state.profiles.find(profile => profile.id === item.profileId)?.label]));
+    if (list.dataset.structure !== signature) {
+      list.replaceChildren(); list.dataset.structure = signature;
+      for (const item of state.tabs) {
+        const row = node('div', '', 'cart-row'); row.dataset.tab = item.id;
+        const label = state.profiles.find(profile => profile.id === item.profileId)?.label || 'Perfil';
+        const index = state.tabs.filter(other => other.profileId === item.profileId).findIndex(other => other.id === item.id) + 1;
+        const main = node('div', '', 'record-main'); main.append(node('strong', `${label} · Janela ${index}`), node('p', '', 'cart-caption'));
+        const time = node('strong', '', 'cart-row-time'); time.setAttribute('role', 'timer'); time.setAttribute('aria-live', 'off');
+        row.append(main, time, button('Selecionar', 'cartTab', item.id)); list.append(row);
+      }
+    }
+    for (const item of state.tabs) {
+      const row = list.querySelector(`[data-tab="${item.id}"]`);
+      row.dataset.urgency = urgency(item.timer);
+      row.querySelector('.cart-row-time').textContent = clockText(item.timer);
+      row.querySelector('.cart-caption').textContent = item.timer ? item.timer.seconds === 0 ? 'Contador esgotado' : item.timer.seconds <= 120 ? '2 minutos ou menos' : 'Contador da Meaple' : item.loading ? 'Carregando…' : 'Tempo não identificado';
+      const control = row.querySelector('button');
+      control.textContent = item.id === tab?.id ? 'Selecionada' : 'Selecionar';
+      control.setAttribute('aria-pressed', String(item.id === tab?.id));
+    }
+  }
   function renderBrowser() {
     if (!state) return;
     options($('desktop-profile'), state.profiles.map(item => [item.label, item.id]), state.profileId);
@@ -91,7 +128,11 @@
     $('desktop-count').textContent = `${state.profiles.length} salvos · ${state.tabs.length} janelas abertas`;
     $('selected-browser-label').textContent = state.profiles.find(item => item.id === state.profileId)?.label || '';
     $('desktop-state').textContent = state.error || (state.loading ? 'Carregando a Meaple…' : state.tab ? 'Somente a janela selecionada acima receberá os dados.' : 'Clique em Abrir / ver Meaple para começar neste perfil.');
-    const list = $('browsers-list'); list.replaceChildren();
+    renderTimers();
+    const list = $('browsers-list');
+    const signature = JSON.stringify([state.profiles, state.profileId, state.tabs.map(item => [item.id, item.profileId])]);
+    if (list.dataset.structure === signature) return;
+    list.dataset.structure = signature; list.replaceChildren();
     for (const profile of state.profiles) {
       const row = node('div', '', 'record-row'); const main = node('div', '', 'record-main');
       main.append(node('strong', profile.label), node('p', `${state.tabs.filter(tab => tab.profileId === profile.id).length} janelas abertas${profile.id === state.profileId ? ' · Selecionado' : ''}`));
@@ -296,6 +337,16 @@
   $('desktop-profile').addEventListener('change', () => { void run(async () => { state = await bridge.selectBrowser($('desktop-profile').value); }); });
   $('desktop-target').addEventListener('change', () => { void run(async () => { state = await bridge.selectTab(Number($('desktop-target').value)); }); });
   $('desktop-open').addEventListener('click', () => { void run(async () => { state = await bridge.open(); }); });
+  $('cart-list').addEventListener('click', event => {
+    const control = event.target.closest('[data-cart-tab]');
+    if (!control) return;
+    const tab = state.tabs.find(item => item.id === Number(control.dataset.cartTab));
+    if (!tab) return;
+    void run(async () => {
+      if (tab.profileId !== state.profileId) state = await bridge.selectBrowser(tab.profileId);
+      state = await bridge.selectTab(tab.id); navigate('buy');
+    });
+  });
   $('desktop-new-window').addEventListener('click', () => { void run(async () => { state = await bridge.open(true); navigate('buy'); }); });
   $('browser-form').addEventListener('submit', event => { event.preventDefault(); void run(async () => { state = await bridge.createBrowser($('desktop-label').value, Number($('desktop-quantity').value)); }, 'Perfis criados. Use um perfil da lista para abrir a Meaple.'); });
   $('desktop-rename').addEventListener('click', () => { void run(async () => { state = await bridge.renameBrowser(state.profileId, $('browser-rename-label').value); $('browser-rename-label').value = ''; }, 'Perfil renomeado.'); });

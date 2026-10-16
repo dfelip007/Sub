@@ -6,6 +6,7 @@ const path = require('node:path');
 const { Store } = require('./store.cjs');
 const { Workspace, partition } = require('./workspace.cjs');
 const { canFill, canNavigate, validateValues } = require('./policy.cjs');
+const { readCartTimer, freshTimer } = require('./cart-timer.cjs');
 const CONTROL_URL = 'app://manager/popup.html';
 const WORLD = 1007;
 const smoke = !app.isPackaged && process.argv.includes('--smoke-test');
@@ -33,6 +34,7 @@ let workspace;
 let browsing;
 let storage;
 let quitting = false;
+let timerPoll;
 
 const ui = path.join(__dirname, 'ui');
 const safeWeb = { nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, allowRunningInsecureContent: false, webviewTag: false, navigateOnDragDrop: false };
@@ -43,7 +45,7 @@ function activeWindow() {
 }
 function state() {
   const selected = activeWindow();
-  const tabs = [...windows.values()].map(entry => ({ id: entry.window.webContents.id, profileId: entry.profileId, url: entry.window.webContents.getURL() || HOME, loading: entry.window.webContents.isLoading(), error: entry.error }));
+  const tabs = [...windows.values()].map(entry => ({ id: entry.window.webContents.id, profileId: entry.profileId, url: entry.window.webContents.getURL() || HOME, loading: entry.window.webContents.isLoading(), error: entry.error, timer: freshTimer(entry) }));
   const tab = tabs.find(item => item.id === selected?.window.webContents.id) || null;
   return { profiles: browsing.profiles, profileId: browsing.selected, tabs, tab, loading: tab?.loading || false, error: tab?.error || '' };
 }
@@ -59,6 +61,32 @@ function current(tabId) {
   return entry;
 }
 const locationGuard = `if (!(${canFill.toString()})(location.href, ${smoke})) throw new Error('Página não permitida para preenchimento.');`;
+const timerCode = `(() => { if (!(${canFill.toString()})(location.href, ${smoke})) return null; return (${readCartTimer.toString()})(document); })()`;
+function resetTimer(entry) { entry.generation++; entry.timer = null; entry.timerReadAt = 0; }
+async function readTimer(entry) {
+  if (entry.reading || entry.window.isDestroyed()) return;
+  const contents = entry.window.webContents;
+  if (contents.isDestroyed()) return;
+  if (entry.error || contents.isLoadingMainFrame() || !canFill(contents.getURL(), smoke)) {
+    if (entry.timer) { resetTimer(entry); notify(); }
+    return;
+  }
+  const generation = entry.generation;
+  const startedAt = Date.now();
+  const previous = JSON.stringify(freshTimer(entry));
+  entry.reading = true;
+  try {
+    const result = await contents.executeJavaScriptInIsolatedWorld(WORLD, [{ code: timerCode }]);
+    if (entry.window.isDestroyed() || entry.generation !== generation) return;
+    entry.timer = result && Number.isInteger(result.seconds) && result.seconds >= 0 && ['running', 'expired'].includes(result.status) ? result : null;
+    entry.timerReadAt = startedAt;
+  } catch {
+    if (entry.generation === generation) { entry.timer = null; entry.timerReadAt = 0; }
+  } finally {
+    entry.reading = false;
+    if (!entry.window.isDestroyed() && previous !== JSON.stringify(freshTimer(entry))) notify();
+  }
+}
 function configureSession(profileId) {
   const remote = session.fromPartition(partition(profileId));
   remote.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
@@ -66,8 +94,10 @@ function configureSession(profileId) {
 }
 function registerWindow(window, profileId) {
   const id = window.webContents.id;
-  const entry = { window, profileId, error: '' };
+  const entry = { window, profileId, error: '', timer: null, timerReadAt: 0, generation: 0, reading: false };
   windows.set(id, entry);
+  window.webContents.on('did-start-navigation', (_event, _url, _inPlace, mainFrame) => { if (mainFrame) { resetTimer(entry); notify(); } });
+  window.webContents.on('dom-ready', () => { void readTimer(entry); });
   configureSession(profileId);
   window.webContents.on('will-navigate', (event, url) => { if (!canNavigate(url, smoke)) event.preventDefault(); });
   window.webContents.on('will-redirect', (event, url) => { if (!canNavigate(url, smoke)) event.preventDefault(); });
@@ -192,6 +222,15 @@ async function start() {
     { label: 'Editar', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] }
   ]));
   await controller.loadURL(CONTROL_URL);
+  // Poll every open profile, including background windows. Only values actually
+  // read from the site are shown; no local timer extends or renews a cart.
+  timerPoll = setInterval(() => {
+    for (const entry of windows.values()) {
+      if (entry.timer && !freshTimer(entry)) { entry.timer = null; notify(); }
+      void readTimer(entry);
+    }
+  }, 1000);
+  timerPoll.unref();
   openCheckout();
 }
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -199,5 +238,5 @@ else {
   app.on('second-instance', () => { if (controller && !controller.isDestroyed()) { controller.show(); controller.focus(); } });
   app.whenReady().then(start).catch(() => { console.error('Não foi possível iniciar o aplicativo. Nenhum dado de pagamento foi registrado no log.'); app.exit(1); });
 }
-app.on('before-quit', () => { quitting = true; storage?.close(); });
+app.on('before-quit', () => { quitting = true; clearInterval(timerPoll); storage?.close(); });
 app.on('window-all-closed', () => app.quit());

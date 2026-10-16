@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '../..');
 (async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'meaple-app-test-'));
-  const fixture = await fs.readFile(path.join(root, 'demo/checkout.html'));
+  const fixture = (await fs.readFile(path.join(root, 'demo/checkout.html'), 'utf8')).replace('<form id="checkout">', '<aside id="cart-deadline">Seu carrinho expira em <strong id="cart-counter">09:58</strong></aside><form id="checkout">');
   const demoScript = await fs.readFile(path.join(root, 'demo/demo.js'));
   const server = http.createServer((request, response) => {
     response.setHeader('Content-Type', request.url === '/demo.js' ? 'application/javascript' : 'text/html; charset=utf-8');
@@ -34,6 +34,14 @@ const root = path.resolve(__dirname, '../..');
   try {
     instance = await launch();
     const panel = await getPanel(instance);
+    // Timer detection starts on checkout load, even with the vault still locked.
+    await panel.waitForFunction(() => document.querySelector('#cart-time')?.textContent === '09:58');
+    const site = instance.windows().find(page => page.url().startsWith('http://127.0.0.1:8080/'));
+    assert.ok(site, 'Janela do site deve estar aberta.');
+    await site.locator('#cart-counter').evaluate(element => { element.textContent = '01:59'; });
+    await panel.waitForFunction(() => document.querySelector('#cart-time').textContent === '01:59' && document.querySelector('#cart-clock').dataset.urgency === 'urgent');
+    await site.locator('#cart-counter').evaluate(element => { element.textContent = '09:58'; });
+    await panel.waitForFunction(() => document.querySelector('#cart-time').textContent === '09:58');
     await panel.locator('.brand-logo').waitFor();
     await panel.waitForFunction(() => { const image = document.querySelector('.brand-logo'); return image.complete && image.naturalWidth > 0; });
     assert.match(await panel.title(), /Submundo/);
@@ -81,8 +89,6 @@ const root = path.resolve(__dirname, '../..');
     await panel.locator('#purchase-amount').fill('123,45');
     await panel.locator('#purchase-installments').selectOption('2');
     assert.equal(await panel.locator('#purchase-cvv').inputValue(), '987');
-    const site = instance.windows().find(page => page.url().startsWith('http://127.0.0.1:8080/'));
-    assert.ok(site, 'Janela do site deve estar aberta.');
     assert.equal(await site.evaluate(() => typeof globalThis.desktopBridge), 'undefined');
     assert.equal(await site.evaluate(() => typeof require), 'undefined');
     await panel.locator('#fill').click();
@@ -148,6 +154,31 @@ const root = path.resolve(__dirname, '../..');
     await panel.waitForFunction(() => document.querySelector('#desktop-target').options.length === 2);
     const thirdId = (await panel.evaluate(() => desktopBridge.checkout())).tab.id;
     const third = await findWindow(thirdId); await third.waitForLoadState();
+    await second.locator('#cart-counter').evaluate(element => { element.textContent = '01:30'; });
+    await third.locator('#cart-counter').evaluate(element => { element.textContent = '03:45'; });
+    await panel.waitForFunction(({ secondId, thirdId }) => document.querySelector('#cart-time').textContent === '03:45'
+      && document.querySelector(`[data-tab="${secondId}"] .cart-row-time`).textContent === '01:30'
+      && document.querySelector(`[data-tab="${thirdId}"] .cart-row-time`).textContent === '03:45', { secondId: newTabId, thirdId });
+    await panel.locator('#cart-overview summary').click();
+    await panel.locator(`[data-cart-tab="${newTabId}"]`).click();
+    await panel.waitForFunction(() => document.querySelector('#cart-time').textContent === '01:30');
+    await second.locator('#cart-counter').evaluate(element => { element.textContent = '00:00'; });
+    await panel.waitForFunction(() => document.querySelector('#cart-time').textContent === '00:00' && document.querySelector('#cart-clock').dataset.urgency === 'expired');
+    await second.evaluate(() => { document.querySelector('#cart-deadline').hidden = true; history.pushState({}, '', '/checkout/sem-contador'); });
+    await panel.waitForFunction(() => document.querySelector('#cart-time').textContent === '—' && document.querySelector('#cart-time-state').textContent === 'Tempo não identificado');
+    // An HTTPS payment-provider window must not be inspected, even if its text looks identical.
+    await second.route('https://provider.example.invalid/**', route => route.fulfill({ contentType: 'text/html', body: '<p>Seu carrinho expira em 10:00</p>' }));
+    await second.goto('https://provider.example.invalid/payment');
+    await panel.waitForFunction(async () => (await desktopBridge.checkout()).tab.url.startsWith('https://provider.example.invalid/'));
+    assert.equal(await panel.locator('#cart-time').textContent(), '—');
+    await second.goto('http://127.0.0.1:8080/checkout.html');
+    await panel.waitForFunction(() => document.querySelector('#cart-time').textContent === '09:58');
+    await panel.locator(`[data-cart-tab="${thirdId}"]`).click();
+    await panel.waitForFunction(() => document.querySelector('#cart-time').textContent === '03:45');
+    await panel.locator(`[data-cart-tab="${thirdId}"]`).focus();
+    await third.locator('#cart-counter').evaluate(element => { element.textContent = '03:44'; });
+    await panel.waitForFunction(() => document.querySelector('#cart-time').textContent === '03:44');
+    assert.equal(await panel.evaluate(() => document.activeElement.dataset.cartTab), String(thirdId), 'Atualizações não recriam os botões nem tiram o foco.');
     assert.equal(await third.evaluate(() => localStorage.getItem('profile-test')), 'second');
     assert.ok(await third.evaluate(() => document.cookie.includes('profile_test=second')));
     await panel.locator('#fill').click();
@@ -179,6 +210,8 @@ const root = path.resolve(__dirname, '../..');
     for (const value of ['00000000000', '000.000.000-00', card.cardNumber, 'cardCvv', 'budgetCents', 'PEDIDO-FICTICIO-1']) assert.equal(operational.includes(value), false);
     await panel.screenshot({ path: path.join(root, 'test-results/desktop-panel.png'), fullPage: true });
     await third.screenshot({ path: path.join(root, 'test-results/desktop-checkout.png'), fullPage: true });
+    await second.close();
+    await panel.waitForFunction(() => document.querySelectorAll('#cart-list .cart-row').length === 2 && document.querySelector('#cart-time').textContent === '03:44');
     // Lock clears current sensitive forms and lists, not just their visibility.
     await panel.locator('#vault-lock').click();
     await panel.waitForFunction(() => document.querySelector('#vault-panel').hidden === false);
@@ -287,7 +320,7 @@ require(${JSON.stringify(path.join(root, 'desktop/app/main.cjs'))});`);
     await branded.locator('.sidebar [data-view=buy]').click();
     await branded.locator('#card-profile').selectOption({ label: 'Principal · final 1111' });
     assert.match(await branded.locator('#buy-balance').textContent(), /876,55/);
-    console.log('PASS: Electron real: layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores; PIN com zero à esquerda e migração da senha antiga sem perda de dados.');
+    console.log('PASS: Electron real: contador automático por janela com cofre bloqueado, atualização, urgência, expiração, ausência, navegação, exclusão de provedor externo, seleção e fechamento; layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores; PIN com zero à esquerda e migração da senha antiga sem perda de dados.');
   } catch (error) {
     const panel = instance?.windows().find(page => page.url() === 'app://manager/popup.html');
     if (panel) { await panel.screenshot({ path: path.join(root, 'test-results/desktop-error.png'), fullPage: true }).catch(() => {}); console.error('UI:', await panel.locator('#message').textContent().catch(() => '')); }

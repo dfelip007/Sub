@@ -6,7 +6,7 @@ A marca e a logo Submundo / 808 aparecem no painel e nos ícones do Windows. A i
 
 ## Usar e atualizar
 
-1. Feche a versão anterior e execute `Submundo-Compras-0.4.0-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados das versões 0.1/0.2/0.3 permanecem no mesmo diretório: use a senha existente uma vez, sem apagar o cofre, e depois defina seu PIN de 4 números em **Contato e ajustes → PIN do cofre**. Os cartões antigos começam sem limite informado e sem CVV salvo.
+1. Feche a versão anterior e execute `Submundo-Compras-0.5.0-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados e o PIN da versão 0.4 permanecem no mesmo diretório. Para cofres das versões 0.1/0.2/0.3, use a senha existente uma vez, sem apagar o cofre, e depois defina seu PIN de 4 números em **Contato e ajustes → PIN do cofre**. Os cartões antigos começam sem limite informado e sem CVV salvo.
 2. Desbloqueie o cofre com o PIN ou crie um PIN de exatamente 4 números no primeiro uso. Em **Contato e ajustes**, salve e-mail e telefone.
 3. Em **Compradores**, use **Novo comprador** para cadastrar nome, CPF e nascimento. Em **Cartões**, use **Novo cartão** para cadastrar número, titular, validade, endereço e limite disponível. A gravação de CVV é opcional por cartão: informe o código e marque **Salvar o CVV no cofre deste cartão**.
 4. Em **Perfis de navegação**, informe um prefixo e a quantidade (por exemplo, 15) e clique em **Criar perfis**. Você pode manter até 100 perfis, criando até 50 por vez. **Usar este perfil** abre a Meaple na sessão escolhida. Faça login, escolha ingressos e avance ao checkout.
@@ -17,6 +17,16 @@ A marca e a logo Submundo / 808 aparecem no painel e nos ícones do Windows. A i
 As telas **Comprar**, **Compradores**, **Cartões**, **Perfis de navegação**, **Histórico de compras** e **Contato e ajustes** ficam na navegação lateral. Os cadastros são editados separadamente da compra. Cartões são identificados pelo nome e pelos quatro últimos dígitos, sem mostrar o número completo nas listas.
 
 **Abrir / ver Meaple** traz a janela selecionada para frente ou abre o site no perfil selecionado. **Nova janela neste perfil** compartilha o login do mesmo perfil. Outros perfis usam cookies separados e continuam abertos; escolha o destino antes de preencher. O programa preenche uma janela por vez, pelo botão. O menu **Aplicativo** permite voltar ou recarregar. Ao fechar o painel, o aplicativo é encerrado. Nascimento e validade recebem as barras automaticamente durante a digitação e a importação.
+
+## Tempo restante do carrinho
+
+Ao abrir o checkout em uma janela do programa, a tela **Comprar** consulta automaticamente o contador visível da Meaple, mesmo com o cofre bloqueado. **Tempo do carrinho selecionado** pertence ao perfil e à janela indicados acima. A leitura é atualizada aproximadamente a cada segundo, inclusive nas outras janelas abertas.
+
+O destaque fica amarelo quando restam **2 minutos ou menos** e vermelho quando o contador chega a zero ou o site informa a expiração. **Visão geral** mostra os tempos de todas as janelas, com perfil e número da janela. **Selecionar** muda o destino do preenchimento para aquela janela; use **Abrir / ver Meaple** para trazê-la para frente. Atualizações do contador preservam o foco dos controles.
+
+O programa espelha o valor informado pelo site, sem presumir duração, renovar reserva ou efetuar pagamento. Aceita relógios `MM:SS`/`HH:MM:SS` e durações em português ligadas ao prazo da compra. Contadores de início de evento, mudança de lote e fila de espera não são usados. Leituras ocultas, ambíguas ou com erro são descartadas. Se o contador desaparecer, a janela navegar ou a leitura ficar mais de cinco segundos sem resposta, o prazo anterior deixa de ser exibido. Ao fechar a janela, ela sai da visão geral. Páginas de provedores externos não são inspecionadas.
+
+Se aparecer **Tempo não identificado**, consulte o prazo na própria Meaple. A detecção depende do texto e da estrutura do checkout; temporizadores em iframe, imagem ou formatos diferentes podem exigir adaptação. O checkout real continua sem validação neste ambiente, pois a Meaple retorna bloqueio 403 pelo proxy. Os testes usam um checkout fictício com contador alterado dinamicamente, troca de janela, expiração, navegação, página externa e fechamento.
 
 ## Limite disponível e histórico
 
@@ -61,7 +71,7 @@ Os dados selecionados são enviados somente ao formulário da Meaple quando o us
 ## Limites da validação
 
 - A versão foi testada em Electron real no Linux e no Windows, com painel, cofre, IPC, navegador próprio e formulário local equivalente aos prints. Inclui criação de 16 perfis, isolamento de cookies e localStorage entre perfis, compartilhamento entre janelas do mesmo perfil, escolha da janela de destino, horário por CPF duplicado, marcação/desmarcação manual, reinício do processo, persistência criptografada, CVV opcional com remoção ao desmarcar, limites, confirmação idempotente de compra, reversão, pendências após reiniciar, limpeza na expiração do cofre e preenchimento sem finalizar compra.
-- O workflow `.github/workflows/windows-desktop.yml` passou no Windows e gerou o artefato **Submundo-Windows-x64**, com executável e checksum. As execuções e os downloads ficam em https://github.com/dfelip007/Sub/actions/workflows/windows-desktop.yml. Escolha a execução bem-sucedida mais recente da versão 0.4. Entre no GitHub, abra a seção **Artifacts** no fim da página, baixe o pacote e extraia o ZIP. O teste completo usa Electron antes do empacotamento; o launcher portátil gerado não foi aberto separadamente pela automação.
+- O workflow `.github/workflows/windows-desktop.yml` testa no Windows e gera o artefato **Submundo-Windows-x64**, com executável e checksum. As execuções e os downloads ficam em https://github.com/dfelip007/Sub/actions/workflows/windows-desktop.yml. Escolha a execução bem-sucedida mais recente da versão 0.5. Entre no GitHub, abra a seção **Artifacts** no fim da página, baixe o pacote e extraia o ZIP. O teste completo usa Electron antes do empacotamento; o launcher portátil gerado não foi aberto separadamente pela automação.
 - O checkout autenticado da Meaple, pagamento real e autenticação bancária não foram testados. O acesso à Meaple foi bloqueado pelo proxy do ambiente. O aplicativo usa uma sessão própria, e o site pode exigir novo login ou validação de acesso.
 - Campos em iframes de provedores de pagamento ainda exigem adaptação ao DOM real. A presença de iframe é indicada nas pendências.
 - O executável ainda não possui assinatura digital de distribuição. Não há certificado ou credencial embutidos.

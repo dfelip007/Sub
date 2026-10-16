@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, protocol, Menu, session } = require('electron');
+const { app, BrowserWindow, ipcMain, protocol, Menu, session, dialog } = require('electron');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const path = require('node:path');
@@ -7,6 +7,7 @@ const { Store } = require('./store.cjs');
 const { Workspace, partition } = require('./workspace.cjs');
 const { canFill, canNavigate, validateValues } = require('./policy.cjs');
 const { readCartTimer, freshTimer } = require('./cart-timer.cjs');
+const { readTickets } = require('./ticket-reader.cjs');
 const CONTROL_URL = 'app://manager/popup.html';
 const WORLD = 1007;
 const smoke = !app.isPackaged && process.argv.includes('--smoke-test');
@@ -45,7 +46,7 @@ function activeWindow() {
 }
 function state() {
   const selected = activeWindow();
-  const tabs = [...windows.values()].map(entry => ({ id: entry.window.webContents.id, profileId: entry.profileId, url: entry.window.webContents.getURL() || HOME, loading: entry.window.webContents.isLoading(), error: entry.error, timer: freshTimer(entry) }));
+  const tabs = [...windows.values()].map(entry => ({ id: entry.window.webContents.id, profileId: entry.profileId, revision: entry.generation, url: entry.window.webContents.getURL() || HOME, loading: entry.window.webContents.isLoading(), error: entry.error, timer: freshTimer(entry) }));
   const tab = tabs.find(item => item.id === selected?.window.webContents.id) || null;
   return { profiles: browsing.profiles, profileId: browsing.selected, tabs, tab, loading: tab?.loading || false, error: tab?.error || '' };
 }
@@ -149,6 +150,20 @@ function handlers() {
   handle('profiles:write', (area, values) => storage.update(area, values));
   handle('profiles:remove', (area, key) => storage.update(area, key, true));
   handle('checkout:state', () => state());
+  handle('tickets:export', async csv => {
+    if (typeof csv !== 'string' || csv.length > 4 * 1024 * 1024) throw new Error('Arquivo de ingressos inválido.');
+    const result = await dialog.showSaveDialog(controller, { title: 'Exportar ingressos para revenda', defaultPath: 'Submundo-ingressos.csv', filters: [{ name: 'Planilha CSV', extensions: ['csv'] }] });
+    if (result.canceled || !result.filePath) return false;
+    await fs.writeFile(result.filePath, csv, { encoding: 'utf8', mode: 0o600 });
+    return true;
+  });
+  handle('checkout:tickets', async tabId => {
+    const entry = current(tabId), generation = entry.generation;
+    const url = entry.window.webContents.getURL();
+    const result = await entry.window.webContents.executeJavaScriptInIsolatedWorld(WORLD, [{ code: `(() => { ${locationGuard} return (${readTickets.toString()})(document); })()` }]);
+    if (entry.window.isDestroyed() || entry.generation !== generation || entry.window.webContents.getURL() !== url) throw new Error('A página mudou. Leia o resumo novamente.');
+    return result;
+  });
   handle('checkout:open', (newWindow = false) => openCheckout(browsing.selected, newWindow === true));
   handle('browsers:create', async (label, count) => { browsing = await workspace.create(label, count); selectedTab = null; notify(); return state(); });
   handle('browsers:select', async id => { browsing = await workspace.select(id); selectedTab = null; notify(); return state(); });
@@ -200,7 +215,7 @@ function handlers() {
   });
 }
 async function start() {
-  const allowed = new Set(['popup.html', 'popup.css', 'dates.js', 'vault.js', 'wallet.js', 'import.js', 'fill.js', 'adapter.js', 'submundo.png']);
+  const allowed = new Set(['popup.html', 'popup.css', 'dates.js', 'vault.js', 'wallet.js', 'tickets.js', 'import.js', 'fill.js', 'adapter.js', 'submundo.png']);
   protocol.handle('app', async request => {
     const url = new URL(request.url);
     const name = url.pathname.slice(1);

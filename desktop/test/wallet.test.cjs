@@ -14,7 +14,7 @@ async function fixture(run) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'meaple-wallet-'));
   const store = new Store(directory);
   const context = vm.createContext({ crypto: webcrypto, TextEncoder, TextDecoder, structuredClone, btoa, atob, Date, Intl });
-  for (const source of ['../../src/dates.js', '../../src/vault.js', '../app/wallet.js']) vm.runInContext(await fs.readFile(path.join(__dirname, source), 'utf8'), context);
+  for (const source of ['../../src/dates.js', '../../src/vault.js', '../app/tickets.js', '../app/wallet.js']) vm.runInContext(await fs.readFile(path.join(__dirname, source), 'utf8'), context);
   const area = name => ({ get: key => store.get(name, key), set: values => store.update(name, values), remove: key => store.update(name, key, true), async setAccessLevel() {} });
   const storage = { local: area('local'), session: area('session') };
   const { Wallet, cents } = context.CheckoutWallet;
@@ -164,4 +164,36 @@ test('sessão desktop dura 30 minutos e restaurar aos 29 minutos não prolonga o
   assert.equal(restored.unlocked, false);
   assert.equal(await new Wallet(storage).restore(), false);
   assert.deepEqual(await store.get('session'), {});
+}));
+test('lotes e preços persistem criptografados; confirmação única, edição e reversão preservam o limite', () => fixture(async ({ wallet, Wallet, storage, store, context }) => {
+  await wallet.create(password);
+  const cardId = await wallet.saveCard('', 'A', card, { available: '1.000,00' });
+  const tickets = { event: 'Evento fictício privado', items: [{ description: 'VIP', lot: 'Lote 1', quantity: 2, unitCents: 5000 }, { description: 'Pista', lot: 'Lote 2', quantity: 1, unitCents: 10000 }] };
+  const id = await wallet.stageOrder({ scope: 'x', cardId, buyer: 'Teste', amount: '220,01', tickets });
+  assert.equal(wallet.summary(cardId).available, 100000);
+  await wallet.confirmOrder(id, '220,01'); await wallet.confirmOrder(id, '220,01');
+  let order = wallet.orders()[0];
+  assert.deepEqual(Array.from(context.CheckoutTickets.costs(order)), [11001, 11000]);
+  await wallet.setResalePrice(id, order.tickets.items[0].id, '80,00');
+  const disk = await fs.readFile(store.filename, 'utf8');
+  for (const text of ['Evento fictício privado', 'resaleCents', 'Lote 1']) assert.equal(disk.includes(text), false);
+  await wallet.lock(); const reopened = new Wallet(storage); await reopened.unlock(password);
+  order = reopened.orders()[0]; assert.equal(order.tickets.items[0].resaleCents, 8000);
+  order.tickets.event = 'Evento corrigido'; await reopened.updateTickets(id, order.tickets);
+  assert.equal(reopened.orders()[0].tickets.items[0].resaleCents, 8000);
+  assert.equal(reopened.summary(cardId).available, 77999);
+  await reopened.finishOrder(id, 'reversed'); assert.equal(reopened.summary(cardId).available, 100000);
+  assert.equal(context.CheckoutTickets.csv(reopened.orders()).includes('Evento corrigido'), false);
+}));
+test('rateio fecha em centavos, dados incompletos não inventam custos e CSV protege fórmulas', () => fixture(async ({ context }) => {
+  const { costs, normalize, csv } = context.CheckoutTickets;
+  const tickets = normalize({ event: '=CMD("teste")', items: [1, 1, 1].map((_, i) => ({ description: 'Pista', lot: `Lote ${i}`, quantity: 1, unitCents: 10 })) });
+  assert.deepEqual(Array.from(costs({ amountCents: 100, tickets })), [34, 33, 33]);
+  const order = { id: 'one', status: 'confirmed', reference: '+FORMULA', amountCents: 100, tickets };
+  const output = csv([order, { ...order, status: 'pending' }]);
+  assert.match(output, /'=CMD\(""teste""\)/); assert.match(output, /'\+FORMULA/);
+  assert.equal(output.split('\r\n').length, 4);
+  assert.deepEqual(Array.from(costs({ amountCents: 100, tickets: { items: [{ quantity: null, unitCents: 10 }] } })), [null]);
+  for (const quantity of [0, -1, 1.5, 1001]) assert.throws(() => normalize({ items: [{ quantity }] }), /Quantidade/);
+  assert.throws(() => normalize({ items: [{ quantity: 2, unitCents: -1 }] }), /unitário/);
 }));

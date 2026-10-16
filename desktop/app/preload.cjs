@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('desktopBridge', {
   write: (area, values) => ipcRenderer.invoke('profiles:write', area, values),
   remove: (area, key) => ipcRenderer.invoke('profiles:remove', area, key),
   checkout: () => ipcRenderer.invoke('checkout:state'),
+  tickets: tabId => ipcRenderer.invoke('checkout:tickets', tabId),
+  exportTickets: csv => ipcRenderer.invoke('tickets:export', csv),
   open: (newWindow = false) => ipcRenderer.invoke('checkout:open', newWindow),
   createBrowser: (label, count) => ipcRenderer.invoke('browsers:create', label, count),
   selectBrowser: id => ipcRenderer.invoke('browsers:select', id),

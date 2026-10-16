@@ -11,6 +11,7 @@
     cards: ['Seus cartões, organizados.', 'Veja o disponível e acompanhe as compras registradas.'],
     browsers: ['Cada login no seu lugar.', 'Vários perfis de navegação, sem instalar extensões.'],
     history: ['Tudo o que foi registrado.', 'Confirme pagamentos e acompanhe o limite de cada cartão.'],
+    tickets: ['Ingressos prontos para organizar.', 'Lotes, custos e preço desejado para revenda em um só lugar.'],
     settings: ['Do seu jeito.', 'Contato fixo, importação e configurações do cofre.']
   };
   const dateTime = value => new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
@@ -18,6 +19,9 @@
   let state, exists = false, busy = false, timer, currentView = 'buy', usageVersion = 0, activeOrderId = '';
   let contact = { email: '', phone: '' };
   let usages = new Map();
+  let draftKey = '', ticketRequest = 0, ticketDirty = false, amountDirty = false, requestedKey = '', editTicketOrder = '';
+  const ticketDrafts = new Map();
+  const resaleDrafts = new Map();
   function message(text, kind = 'success') { $('message').textContent = text; $('message').dataset.kind = kind; $('message').hidden = !text; }
   function node(tag, text, className = '') { const result = document.createElement(tag); result.textContent = text; if (className) result.className = className; return result; }
   function button(text, action, id, className = 'secondary') { const result = node('button', text, className); result.type = 'button'; result.dataset[action] = id; return result; }
@@ -40,6 +44,9 @@
     for (const control of document.querySelectorAll('#buyer-form button,#card-form button,[data-new],#import')) control.disabled = busy || !wallet.unlocked;
     $('purchase-fields').disabled = busy || !wallet.unlocked;
     $('pin-fields').disabled = busy || !wallet.unlocked;
+    $('ticket-edit-fields').disabled = busy || !wallet.unlocked;
+    $('tickets-export').disabled = busy || !wallet.unlocked;
+    for (const control of document.querySelectorAll('#tickets-stock input,#tickets-stock button')) control.disabled = busy || !wallet.unlocked;
     $('buyer-profile').disabled = $('card-profile').disabled = busy || !wallet.unlocked;
     $('desktop-profile').disabled = busy || !state;
     $('desktop-target').disabled = busy || !state?.tab;
@@ -129,6 +136,7 @@
     $('selected-browser-label').textContent = state.profiles.find(item => item.id === state.profileId)?.label || '';
     $('desktop-state').textContent = state.error || (state.loading ? 'Carregando a Meaple…' : state.tab ? 'Somente a janela selecionada acima receberá os dados.' : 'Clique em Abrir / ver Meaple para começar neste perfil.');
     renderTimers();
+    syncTicketDraft();
     const list = $('browsers-list');
     const signature = JSON.stringify([state.profiles, state.profileId, state.tabs.map(item => [item.id, item.profileId])]);
     if (list.dataset.structure === signature) return;
@@ -191,9 +199,11 @@
       const result = node('div', '', 'record-row'); const main = node('div', '', 'record-main');
       main.append(node('strong', `${money(order.amountCents)} · ${order.cardLabel} · final ${order.cardLast4}`), node('p', `${order.buyer} · ${order.profile} · ${dateTime(order.confirmedAt || order.createdAt)}`), node('span', statusNames[order.status], `tag ${order.status}`));
       if (order.reference) main.append(node('p', `Pedido: ${order.reference}`));
+      if (order.tickets?.items.length) main.append(node('p', `${order.tickets.event || 'Evento não informado'} · ${order.tickets.items.map(item => `${item.quantity ?? '?'} × ${item.description || 'Ingresso'} · ${item.lot || 'Lote não informado'} · ${money(item.unitCents)}`).join(' / ')}`));
       const actions = node('div', '', 'actions');
       if (order.status === 'pending') actions.append(button('Registrar pagamento', 'confirmOrder', order.id), button('Cancelar registro', 'cancelOrder', order.id, 'quiet'));
       if (order.status === 'confirmed') actions.append(button('Desfazer registro', 'reverseOrder', order.id, 'quiet'));
+      if (['pending', 'confirmed'].includes(order.status)) actions.append(button('Conferir ingressos', 'editTickets', order.id, 'quiet'));
       result.append(main, actions); return result;
     }
     for (const order of orders) {
@@ -203,7 +213,97 @@
     if (!pending.children.length) empty(pending, 'Nenhum pagamento aguardando registro.', 'Ao preencher um checkout, ele aparecerá aqui.');
     if (!history.children.length) empty(history, 'Seu histórico começa na próxima compra.', 'Os registros ficam salvos no cofre e podem ser consultados depois.');
   }
-  function render() { renderVault(); renderBrowser(); renderProfiles(); renderOrders(); controls(); }
+  function render() { renderVault(); renderBrowser(); renderProfiles(); renderOrders(); renderStock(); controls(); }
+  const tabKey = tab => tab ? `${tab.id}:${tab.revision}:${tab.url}` : '';
+  function ticketRows(prefix, items) {
+    const target = $(`${prefix}-rows`); target.replaceChildren();
+    for (const item of items) addTicketRow(prefix, item);
+  }
+  function addTicketRow(prefix, item = { quantity: 1 }) {
+    const row = node('div', '', 'ticket-line'); row.dataset.ticketId = item.id || crypto.randomUUID();
+    for (const [field, title, value] of [['description', 'Ingresso / setor', item.description], ['lot', 'Lote', item.lot], ['quantity', 'Quantidade', item.quantity], ['unit', 'Valor unitário (R$)', item.unit ?? inputMoney(item.unitCents)]]) {
+      const label = node('label', title), input = node('input'); input.dataset.ticketField = field; input.value = value ?? '';
+      input.maxLength = field === 'description' ? 160 : field === 'lot' ? 80 : 20;
+      if (field === 'quantity') { input.type = 'number'; input.min = '1'; input.max = '1000'; input.step = '1'; }
+      if (field === 'quantity' || field === 'unit') input.inputMode = field === 'quantity' ? 'numeric' : 'decimal';
+      label.append(input); row.append(label);
+    }
+    const remove = button('Remover', 'removeTicket', prefix, 'quiet'); row.append(remove); $(`${prefix}-rows`).append(row);
+  }
+  function ticketDraft(prefix = 'ticket') {
+    return { event: $(`${prefix}-event`).value, items: [...$(`${prefix}-rows`).children].map(row => ({ id: row.dataset.ticketId, ...Object.fromEntries([...row.querySelectorAll('input')].map(input => [input.dataset.ticketField, input.value])) })) };
+  }
+  function parsedTickets(prefix = 'ticket') {
+    const draft = ticketDraft(prefix);
+    return CheckoutTickets.normalize({ event: draft.event, items: draft.items.map(item => ({ ...item, unitCents: item.unit.trim() ? cents(item.unit) : null })) });
+  }
+  function syncTicketDraft() {
+    if (!wallet.unlocked) return;
+    const key = tabKey(state?.tab);
+    if (key !== draftKey) {
+      if (draftKey) ticketDrafts.set(draftKey, { ...ticketDraft(), dirty: ticketDirty, amount: $('purchase-amount').value, amountDirty });
+      if (ticketDrafts.size > 200) ticketDrafts.delete(ticketDrafts.keys().next().value);
+      draftKey = key; ticketRequest++;
+      const cached = ticketDrafts.get(key);
+      $('ticket-event').value = cached?.event || ''; ticketRows('ticket', cached?.items || []);
+      ticketDirty = cached?.dirty || false; amountDirty = cached?.amountDirty || false;
+      $('purchase-amount').value = cached?.amount || ''; renderSelection();
+      requestedKey = cached ? key : '';
+      $('ticket-read-state').textContent = cached ? 'Dados desta janela restaurados. Confira o resumo atual antes de comprar.' : 'Resumo ainda não identificado. Você pode informar evento, lote, quantidade e preço manualmente.';
+    }
+    if (key && !state.tab.loading && requestedKey !== key) { requestedKey = key; void refreshTickets(false); }
+  }
+  async function refreshTickets(replace) {
+    if (!wallet.unlocked || !state?.tab) return;
+    const key = draftKey, request = ++ticketRequest, id = state.tab.id;
+    $('ticket-read-state').textContent = 'Lendo o resumo da janela selecionada…';
+    try {
+      const result = await bridge.tickets(id);
+      if (!wallet.unlocked || key !== draftKey || request !== ticketRequest) return;
+      if (!ticketDirty || replace) {
+        $('ticket-event').value = result.event || ''; ticketRows('ticket', result.items || []); ticketDirty = false;
+      }
+      if (!amountDirty && result.totalCents != null) { $('purchase-amount').value = inputMoney(result.totalCents); renderSelection(); }
+      $('ticket-read-state').textContent = ticketDirty && !replace ? 'Edição manual mantida. Use Ler resumo para substituir pelos dados do site.' : result.items?.length ? 'Resumo lido da Meaple. Confira lote, quantidade e valor unitário; complete os campos em branco.' : 'Resumo não identificado. Informe os dados manualmente ou tente ler novamente no checkout.';
+    } catch {
+      if (key === draftKey && request === ticketRequest && wallet.unlocked) $('ticket-read-state').textContent = 'Não foi possível ler este resumo. Informe os ingressos manualmente ou tente novamente na Meaple.';
+    }
+  }
+  function openTickets(id) {
+    if (!wallet.unlocked) return;
+    const order = wallet.orders().find(item => item.id === id && ['pending', 'confirmed'].includes(item.status));
+    if (!order) return;
+    editTicketOrder = id; $('ticket-edit-event').value = order.tickets?.event || ''; ticketRows('ticket-edit', order.tickets?.items || []);
+    $('ticket-edit-error').textContent = ''; $('ticket-dialog').showModal();
+  }
+  function renderStock() {
+    const orders = wallet.unlocked ? wallet.orders().filter(order => order.status === 'confirmed') : [];
+    const target = $('tickets-stock'); target.replaceChildren();
+    const count = orders.reduce((sum, order) => sum + (order.tickets?.items || []).reduce((n, item) => n + (item.quantity || 0), 0), 0);
+    const review = orders.filter(order => !CheckoutTickets.ready(order)).length;
+    $('tickets-totals').textContent = wallet.unlocked ? `${count} ingressos com quantidade informada · ${orders.length} compras pagas · Custo total: ${money(orders.reduce((sum, order) => sum + order.amountCents, 0))}${review ? ` · ${review} compras precisam de revisão` : ''}` : 'Desbloqueie o cofre para consultar os ingressos.';
+    for (const order of orders) {
+      const card = node('article', '', 'surface stock-order'), header = node('div', '', 'section-heading');
+      const title = node('div'); title.append(node('h2', order.tickets?.event || 'Evento não informado'), node('p', `${dateTime(order.confirmedAt)} · Total pago ${money(order.amountCents)}${order.reference ? ` · Pedido ${order.reference}` : ''}`, 'hint'));
+      header.append(title, button('Conferir ingressos', 'editTickets', order.id, 'secondary')); card.append(header);
+      if (!CheckoutTickets.ready(order)) card.append(node('p', 'Revisar dados: complete evento, ingresso, lote, quantidade e valor unitário.', 'callout'));
+      const allocated = CheckoutTickets.costs(order);
+      for (const [index, item] of (order.tickets?.items || []).entries()) {
+        const row = node('div', '', 'stock-line'); row.dataset.stockItem = item.id;
+        const average = allocated[index] != null && item.quantity ? allocated[index] / item.quantity : null;
+        row.append(node('strong', `${item.quantity ?? '?'} × ${item.description || 'Ingresso não informado'} · ${item.lot || 'Lote não informado'}`), node('p', `Ingresso: ${money(item.unitCents)} cada · Custo total com taxas: ${money(allocated[index])} · Custo médio por ingresso: ${money(average)}`, 'hint'));
+        const label = node('label', 'Preço de revenda por ingresso (R$)'), input = node('input'); input.inputMode = 'decimal'; input.dataset.resaleKey = `${order.id}:${item.id}`; input.value = resaleDrafts.get(input.dataset.resaleKey) ?? inputMoney(item.resaleCents); input.maxLength = 20; label.append(input);
+        const save = button('Salvar preço', 'saveResale', order.id, 'secondary'); save.dataset.item = item.id;
+        const actions = node('div', '', 'resale-actions'); actions.append(label, save); row.append(actions);
+        row.append(node('p', resaleDrafts.has(input.dataset.resaleKey) ? 'Alteração ainda não salva. O CSV usa os preços salvos.' : '', 'hint resale-note'));
+        const revenue = item.resaleCents != null && item.quantity != null ? item.resaleCents * item.quantity : null;
+        row.append(node('p', `Receita prevista: ${money(revenue)} · Resultado previsto: ${money(revenue != null && allocated[index] != null ? revenue - allocated[index] : null)}`, 'hint'));
+        card.append(row);
+      }
+      target.append(card);
+    }
+    if (!orders.length) empty(target, 'Seus ingressos aparecerão aqui após registrar o pagamento.', 'Compras pendentes, canceladas e registros desfeitos não entram nesta lista.');
+  }
   async function refreshUsage() {
     const version = ++usageVersion;
     const buyers = wallet.unlocked ? wallet.list('buyers') : [];
@@ -216,6 +316,10 @@
   }
   async function lock() {
     await wallet.lock(); usages.clear(); usageVersion++;
+    ticketRequest++; draftKey = requestedKey = ''; ticketDrafts.clear(); resaleDrafts.clear(); ticketDirty = amountDirty = false;
+    $('ticket-event').value = ''; ticketRows('ticket', []); $('ticket-edit-event').value = ''; ticketRows('ticket-edit', []);
+    if ($('ticket-dialog').open) $('ticket-dialog').close(); editTicketOrder = '';
+    $('ticket-read-state').textContent = 'Desbloqueie o cofre para ler e salvar os ingressos.';
     for (const id of ['buyer-form', 'card-form', 'checkout', 'vault-form', 'pin-form']) $(id).reset();
     for (const id of ['buyer-editor', 'card-editor']) $(id).hidden = true;
     $('import-data').value = ''; $('buyer-search').value = '';
@@ -267,6 +371,13 @@
     if (control.dataset.close) $(control.dataset.close).hidden = true;
     if (control.dataset.editBuyer) editor('buyer', control.dataset.editBuyer);
     if (control.dataset.editCard) editor('card', control.dataset.editCard);
+    if (control.dataset.editTickets) openTickets(control.dataset.editTickets);
+    if (control.dataset.removeTicket) { control.closest('.ticket-line').remove(); if (control.dataset.removeTicket === 'ticket') ticketDirty = true; }
+    if (control.dataset.saveResale) void run(async () => {
+      const input = control.closest('.stock-line').querySelector('input');
+      await wallet.setResalePrice(control.dataset.saveResale, control.dataset.item, input.value);
+      resaleDrafts.delete(input.dataset.resaleKey);
+    }, 'Preço de revenda salvo.');
     if (control.dataset.useProfile) void run(async () => { state = await bridge.selectBrowser(control.dataset.useProfile); state = await bridge.open(); navigate('buy'); });
     if (control.dataset.confirmOrder) openOrder(control.dataset.confirmOrder);
     if (control.dataset.cancelOrder && globalThis.confirm('Cancelar este registro pendente? Nenhum valor será descontado do limite.')) void run(() => wallet.finishOrder(control.dataset.cancelOrder, 'canceled'), 'Registro pendente cancelado.');
@@ -333,6 +444,30 @@
   $('buyer-profile').addEventListener('change', () => { renderSelection(); controls(); });
   $('card-profile').addEventListener('change', () => renderSelection(true));
   $('purchase-amount').addEventListener('input', () => renderSelection());
+  $('purchase-amount').addEventListener('input', () => { amountDirty = true; });
+  $('ticket-event').addEventListener('input', () => { ticketDirty = true; });
+  $('ticket-rows').addEventListener('input', () => { ticketDirty = true; });
+  $('ticket-add').addEventListener('click', () => { addTicketRow('ticket'); ticketDirty = true; });
+  $('ticket-refresh').addEventListener('click', () => {
+    if (ticketDirty && !globalThis.confirm('Substituir as edições dos ingressos pelo resumo atual desta janela?')) return;
+    void run(() => refreshTickets(true));
+  });
+  $('ticket-edit-add').addEventListener('click', () => addTicketRow('ticket-edit'));
+  $('ticket-edit-close').addEventListener('click', () => $('ticket-dialog').close());
+  $('ticket-dialog').addEventListener('close', () => { editTicketOrder = ''; $('ticket-edit-event').value = ''; ticketRows('ticket-edit', []); $('ticket-edit-error').textContent = ''; });
+  $('ticket-edit-form').addEventListener('submit', async event => {
+    event.preventDefault(); if (busy || !editTicketOrder) return;
+    busy = true; controls();
+    try { await wallet.updateTickets(editTicketOrder, parsedTickets('ticket-edit')); $('ticket-dialog').close(); message('Ingressos atualizados. O total pago foi preservado.'); }
+    catch (error) { $('ticket-edit-error').textContent = error.message; }
+    finally { busy = false; render(); }
+  });
+  $('tickets-export').addEventListener('click', () => { void run(async () => { const saved = await bridge.exportTickets(CheckoutTickets.csv(wallet.orders())); message(saved ? 'CSV exportado. Inclui somente compras registradas como pagas, sem CPF ou dados de cartão.' : 'Exportação cancelada.'); }); });
+  $('tickets-stock').addEventListener('input', event => {
+    if (!event.target.dataset.resaleKey) return;
+    resaleDrafts.set(event.target.dataset.resaleKey, event.target.value);
+    event.target.closest('.stock-line').querySelector('.resale-note').textContent = 'Alteração ainda não salva. O CSV usa os preços salvos.';
+  });
   $('history-filter').addEventListener('change', renderOrders);
   $('desktop-profile').addEventListener('change', () => { void run(async () => { state = await bridge.selectBrowser($('desktop-profile').value); }); });
   $('desktop-target').addEventListener('change', () => { void run(async () => { state = await bridge.selectTab(Number($('desktop-target').value)); }); });
@@ -370,8 +505,10 @@
       if (!CheckoutDates.validBirth(buyer.values.birthDate) || !CheckoutDates.validExpiry(card.values.cardExpiry)) throw new Error('Confira nascimento e validade nos cadastros.');
       const destination = await bridge.checkout();
       if (!destination.tab) throw new Error('Abra a Meaple no perfil e escolha a janela de destino.');
+      if (tabKey(destination.tab) === draftKey && !ticketDirty) await refreshTickets(false);
+      const tickets = tabKey(destination.tab) === draftKey ? parsedTickets() : { event: '', items: [] };
       const profile = destination.profiles.find(item => item.id === destination.profileId);
-      const orderId = await wallet.stageOrder({ scope: `${runtime}:${destination.tab.id}`, cardId: card.id, buyer: buyer.label, buyerId: buyer.id, profile: profile.label, amount: $('purchase-amount').value });
+      const orderId = await wallet.stageOrder({ scope: `${runtime}:${destination.tab.id}`, cardId: card.id, buyer: buyer.label, buyerId: buyer.id, profile: profile.label, amount: $('purchase-amount').value, tickets });
       const data = Object.fromEntries([...CheckoutVault.buyerFields.map(field => [field, buyer.values[field]]), ...CheckoutVault.cardFields.map(field => [field, card.values[field] || '']), ['email', contact.email], ['phone', contact.phone], ['cardCvv', cvv], ['installments', $('purchase-installments').value]]);
       $('status').textContent = 'Preenchendo o checkout…'; $('status').dataset.kind = ''; $('details').replaceChildren();
       try {

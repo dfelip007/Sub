@@ -67,8 +67,9 @@
         items.splice(index, 1);
       });
     }
-    stageOrder({ scope, cardId, buyer, buyerId = '', profile, amount = '' }) {
+    stageOrder({ scope, cardId, buyer, buyerId = '', profile, amount = '', tickets }) {
       const amountCents = String(amount).trim() ? cents(amount) : null;
+      const ticketData = tickets == null ? null : CheckoutTickets.normalize(tickets);
       if (amountCents != null && amountCents <= 0) return Promise.reject(new Error('O valor da compra deve ser maior que zero.'));
       return this.change('cards', (cards, data) => {
         const card = cards.find(item => item.id === cardId);
@@ -82,7 +83,31 @@
           data.orders.push(order);
         }
         Object.assign(order, { cardId, buyerId, cardLabel: card.label, cardLast4: card.values.cardNumber.replace(/\D/g, '').slice(-4), buyer: String(buyer).slice(0, 100), profile: String(profile).slice(0, 100), amountCents });
+        if (ticketData) order.tickets = ticketData;
         return order.id;
+      });
+    }
+    updateTickets(id, tickets) {
+      const normalized = CheckoutTickets.normalize(tickets);
+      return this.change('cards', (_cards, data) => {
+        const order = (data.orders || []).find(item => item.id === id);
+        if (!order || !['pending', 'confirmed'].includes(order.status)) throw new Error('Esta compra não pode ser editada.');
+        for (const item of normalized.items) {
+          const previous = order.tickets?.items.find(other => other.id === item.id);
+          if (previous?.resaleCents != null) item.resaleCents = previous.resaleCents;
+          if (item.resaleCents != null && item.quantity != null && item.resaleCents * item.quantity > MAX_CENTS) throw new Error('Valor de revenda fora do limite.');
+        }
+        order.tickets = normalized;
+      });
+    }
+    setResalePrice(id, itemId, price) {
+      const resaleCents = String(price).trim() ? cents(price) : null;
+      return this.change('cards', (_cards, data) => {
+        const order = (data.orders || []).find(item => item.id === id && item.status === 'confirmed');
+        const item = order?.tickets?.items.find(item => item.id === itemId);
+        if (!item) throw new Error('Ingresso não encontrado nesta compra paga.');
+        if (resaleCents != null && item.quantity != null && resaleCents * item.quantity > MAX_CENTS) throw new Error('Valor de revenda fora do limite.');
+        item.resaleCents = resaleCents;
       });
     }
     confirmOrder(id, amount, reference = '') {

@@ -20,6 +20,18 @@
   const inputMoney = value => value == null ? '' : (value / 100).toFixed(2).replace('.', ',');
   const spent = (data, id) => (data.orders || []).filter(order => order.cardId === id && order.status === 'confirmed').reduce((sum, order) => sum + order.amountCents, 0);
   class Wallet extends CheckoutVault.Vault {
+    constructor(storage) { super(storage, { sessionMs: 30 * 60 * 1000, credentialFormat: 'pin4' }); }
+    get pinConfigured() { return this.envelope?.credential === 'pin4'; }
+    validatePassword(pin) { if (typeof pin !== 'string' || !/^[0-9]{4}$/.test(pin)) throw new Error('O PIN deve ter exatamente 4 números.'); }
+    async unlock(secret) {
+      await this.load();
+      if (this.pinConfigured) this.validatePassword(secret);
+      try { await super.unlock(secret); }
+      catch (error) {
+        if (this.pinConfigured && error.message.startsWith('Senha incorreta')) throw new Error('PIN incorreto ou cofre danificado. Os dados foram preservados.');
+        throw error;
+      }
+    }
     cards() { return this.list('cards'); }
     orders() { this.list('cards'); return structuredClone(this.data.orders || []).sort((a, b) => b.createdAt - a.createdAt); }
     summary(id) {

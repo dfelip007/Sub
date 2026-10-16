@@ -32,9 +32,9 @@ class Store {
     if (key === 'contact') {
       if (Object.keys(value).some(field => !['email', 'phone'].includes(field)) || typeof value.email !== 'string' || typeof value.phone !== 'string' || value.email.length > 500 || value.phone.length > 80) throw new Error('Contato inválido.');
     } else if (key === 'checkoutVault') {
-      if (Object.keys(value).some(field => !['version', 'iterations', 'salt', 'iv', 'ciphertext'].includes(field)) || value.version !== 1 || value.iterations !== 310000 || ![value.salt, value.iv, value.ciphertext].every(item => typeof item === 'string' && item.length && /^[A-Za-z0-9+/=]+$/.test(item)) || value.ciphertext.length > 5 * 1024 * 1024) throw new Error('Cofre criptografado inválido.');
+      if (Object.keys(value).some(field => !['version', 'iterations', 'salt', 'iv', 'ciphertext', 'credential'].includes(field)) || (value.credential !== undefined && value.credential !== 'pin4') || value.version !== 1 || value.iterations !== 310000 || ![value.salt, value.iv, value.ciphertext].every(item => typeof item === 'string' && item.length && /^[A-Za-z0-9+/=]+$/.test(item)) || value.ciphertext.length > 5 * 1024 * 1024) throw new Error('Cofre criptografado inválido.');
     } else {
-      if (Object.keys(value).some(field => !['salt', 'key', 'expiresAt'].includes(field)) || ![value.salt, value.key].every(item => typeof item === 'string' && item.length <= 100 && /^[A-Za-z0-9+/=]+$/.test(item)) || !Number.isFinite(value.expiresAt) || value.expiresAt <= Date.now() || value.expiresAt > Date.now() + 15 * 60 * 1000 + 5000) throw new Error('Sessão inválida.');
+      if (Object.keys(value).some(field => !['salt', 'key', 'expiresAt'].includes(field)) || ![value.salt, value.key].every(item => typeof item === 'string' && item.length <= 100 && /^[A-Za-z0-9+/=]+$/.test(item)) || !Number.isFinite(value.expiresAt) || value.expiresAt <= Date.now() || value.expiresAt > Date.now() + 30 * 60 * 1000 + 5000) throw new Error('Sessão inválida.');
     }
   }
   expire() {

@@ -14,8 +14,10 @@
   const decode = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
   const pick = (data, keys) => Object.fromEntries(keys.map(key => [key, String(data[key] || '').trim()]));
   class Vault {
-    constructor(storage) {
+    constructor(storage, { sessionMs = SESSION_MS, credentialFormat = null } = {}) {
       this.storage = storage;
+      this.sessionMs = sessionMs;
+      this.credentialFormat = credentialFormat;
       this.key = null;
       this.data = null;
       this.envelope = null;
@@ -30,15 +32,16 @@
     }
     validateEnvelope() {
       if (this.envelope && (this.envelope.version !== 1 || this.envelope.iterations !== ITERATIONS || !this.envelope.salt || !this.envelope.iv || !this.envelope.ciphertext)) throw new Error('Cofre inválido ou de outra versão. Os dados foram preservados.');
+      if (this.envelope?.credential !== undefined && this.envelope.credential !== 'pin4') throw new Error('Formato de acesso ao cofre desconhecido. Os dados foram preservados.');
     }
     async derive(password, salt) {
       const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
       return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: decode(salt), iterations: ITERATIONS, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
     }
-    async encrypt(data, key, salt) {
+    async encrypt(data, key, salt, credential = this.envelope?.credential) {
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(data)));
-      return { version: 1, iterations: ITERATIONS, salt, iv: encode(iv), ciphertext: encode(new Uint8Array(ciphertext)) };
+      return { version: 1, iterations: ITERATIONS, salt, iv: encode(iv), ciphertext: encode(new Uint8Array(ciphertext)), ...(credential ? { credential } : {}) };
     }
     async decrypt(key) {
       const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: decode(this.envelope.iv) }, key, decode(this.envelope.ciphertext));
@@ -57,18 +60,21 @@
         // Saving the encrypted vault still works when session storage is unavailable.
       }
     }
-    async create(password) {
+    validatePassword(password) {
       if (password.length < 10) throw new Error('Use uma senha com pelo menos 10 caracteres.');
+    }
+    async create(password) {
+      this.validatePassword(password);
       if (await this.load()) throw new Error('Já existe um cofre. Use a senha para desbloquear.');
       const salt = encode(crypto.getRandomValues(new Uint8Array(16)));
       const key = await this.derive(password, salt);
       const data = { buyers: [], cards: [] };
-      const envelope = await this.encrypt(data, key, salt);
+      const envelope = await this.encrypt(data, key, salt, this.credentialFormat);
       await this.storage.local.set({ [KEY]: envelope });
       this.envelope = envelope;
       this.key = key;
       this.data = data;
-      this.expiresAt = Date.now() + SESSION_MS;
+      this.expiresAt = Date.now() + this.sessionMs;
       await this.remember();
     }
     async unlock(password) {
@@ -79,7 +85,7 @@
       catch { throw new Error('Senha incorreta ou cofre danificado. Os dados foram preservados.'); }
       this.key = key;
       this.data = data;
-      this.expiresAt = Date.now() + SESSION_MS;
+      this.expiresAt = Date.now() + this.sessionMs;
       await this.remember();
     }
     async restore() {
@@ -117,6 +123,30 @@
         await this.storage.local.set({ [KEY]: envelope });
         if (this.unlocked && this.key === key) { this.data = next; this.envelope = envelope; }
         return result;
+      });
+      this.queue = operation.catch(() => {});
+      return operation;
+    }
+    changePassword(password) {
+      this.validatePassword(password);
+      const operation = this.queue.then(async () => {
+        this.list('cards');
+        const previousKey = this.key;
+        const data = structuredClone(this.data);
+        const salt = encode(crypto.getRandomValues(new Uint8Array(16)));
+        const key = await this.derive(password, salt);
+        const envelope = await this.encrypt(data, key, salt, this.credentialFormat);
+        if (!this.unlocked || this.key !== previousKey) throw new Error('O cofre foi bloqueado. Desbloqueie e tente novamente.');
+        // Commit the entire re-encrypted vault atomically; a failed write keeps
+        // the old credential and all records intact.
+        await this.storage.local.set({ [KEY]: envelope });
+        this.envelope = envelope;
+        if (this.unlocked && this.key === previousKey) {
+          this.key = key;
+          this.data = data;
+          this.expiresAt = Date.now() + this.sessionMs;
+          await this.remember();
+        }
       });
       this.queue = operation.catch(() => {});
       return operation;

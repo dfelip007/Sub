@@ -39,6 +39,7 @@
     for (const control of document.querySelectorAll('button')) control.disabled = busy;
     for (const control of document.querySelectorAll('#buyer-form button,#card-form button,[data-new],#import')) control.disabled = busy || !wallet.unlocked;
     $('purchase-fields').disabled = busy || !wallet.unlocked;
+    $('pin-fields').disabled = busy || !wallet.unlocked;
     $('buyer-profile').disabled = $('card-profile').disabled = busy || !wallet.unlocked;
     $('desktop-profile').disabled = busy || !state;
     $('desktop-target').disabled = busy || !state?.tab;
@@ -60,16 +61,25 @@
   function renderVault() {
     clearTimeout(timer);
     const unlocked = wallet.unlocked;
-    $('vault-state').textContent = unlocked ? '● Cofre desbloqueado' : exists ? 'Cofre bloqueado' : 'Crie seu cofre';
+    $('vault-state').textContent = unlocked ? '● Cofre desbloqueado · 30 min' : exists ? 'Cofre bloqueado' : 'Crie seu cofre';
     $('vault-state').classList.toggle('locked', !unlocked);
     $('vault-panel').hidden = unlocked;
     $('vault-lock').hidden = !unlocked;
     $('vault-reset').hidden = !exists;
     $('vault-title').textContent = exists ? 'Bem-vindo de volta.' : 'Tudo começa pelo seu cofre.';
-    $('vault-description').textContent = exists ? 'Desbloqueie para acessar compradores, cartões e histórico.' : 'Crie uma senha para guardar seus cadastros com criptografia.';
+    const usePin = !exists || wallet.pinConfigured;
+    $('vault-description').textContent = !exists ? 'Crie um PIN de 4 números para acessar seus cadastros.' : usePin ? 'Informe seu PIN para acessar compradores, cartões e histórico.' : 'Use sua senha anterior uma vez e depois defina o PIN de 4 números.';
+    $('vault-password-label').textContent = usePin ? 'PIN do cofre (4 números)' : 'Senha anterior do cofre';
+    $('vault-access-help').textContent = usePin ? 'Use exatamente 4 números. Desbloqueado por até 30 minutos ou até fechar o programa.' : 'Seus dados serão mantidos. Após entrar com a senha anterior, defina o novo PIN em Contato e ajustes.';
+    const secretInput = $('vault-password');
+    secretInput.inputMode = usePin ? 'numeric' : 'text';
+    if (usePin) { secretInput.maxLength = 4; secretInput.pattern = '[0-9]{4}'; }
+    else { secretInput.removeAttribute('maxlength'); secretInput.removeAttribute('pattern'); }
     $('vault-confirm-label').hidden = exists;
     $('vault-confirm').required = !exists;
-    $('vault-password').minLength = exists ? 1 : 10;
+    $('vault-password').minLength = usePin ? 4 : 1;
+    $('pin-migration').hidden = !unlocked || wallet.pinConfigured;
+    $('pin-settings-help').textContent = !unlocked ? 'Desbloqueie o cofre para definir ou trocar o PIN.' : wallet.pinConfigured ? 'Seu PIN atual tem 4 números. Para trocar, informe o novo PIN abaixo.' : 'Sua senha anterior foi confirmada. Escolha agora o PIN de 4 números.';
     $('vault-unlock').textContent = exists ? 'Desbloquear cofre' : 'Criar cofre e começar';
     if (unlocked) timer = setTimeout(expire, Math.max(0, wallet.expiresAt - Date.now()));
   }
@@ -165,7 +175,7 @@
   }
   async function lock() {
     await wallet.lock(); usages.clear(); usageVersion++;
-    for (const id of ['buyer-form', 'card-form', 'checkout', 'vault-form']) $(id).reset();
+    for (const id of ['buyer-form', 'card-form', 'checkout', 'vault-form', 'pin-form']) $(id).reset();
     for (const id of ['buyer-editor', 'card-editor']) $(id).hidden = true;
     $('import-data').value = ''; $('buyer-search').value = '';
     if ($('order-dialog').open) $('order-dialog').close();
@@ -224,16 +234,26 @@
   $('vault-form').addEventListener('submit', event => {
     event.preventDefault(); void run(async () => {
       try {
-        if (!exists && $('vault-password').value !== $('vault-confirm').value) throw new Error('As senhas precisam ser iguais.');
+        if (!exists && $('vault-password').value !== $('vault-confirm').value) throw new Error('Os PINs precisam ser iguais.');
         if (exists) await wallet.unlock($('vault-password').value); else await wallet.create($('vault-password').value);
         exists = true; await refreshUsage();
+        if (!wallet.pinConfigured) navigate('settings');
+        message(wallet.pinConfigured ? 'Cofre desbloqueado por até 30 minutos.' : 'Senha anterior confirmada. Defina o novo PIN abaixo para concluir a troca.');
       } finally { $('vault-password').value = $('vault-confirm').value = ''; }
-    }, 'Cofre desbloqueado. Seus cadastros estão prontos.');
+    });
+  });
+  $('pin-form').addEventListener('submit', event => {
+    event.preventDefault(); void run(async () => {
+      try {
+        if ($('new-pin').value !== $('confirm-pin').value) throw new Error('Os PINs precisam ser iguais.');
+        await wallet.changePassword($('new-pin').value);
+      } finally { $('pin-form').reset(); }
+    }, 'PIN salvo. Seus cadastros foram mantidos. O cofre fica desbloqueado por até 30 minutos.');
   });
   $('vault-lock').addEventListener('click', () => { void run(lock, 'Cofre bloqueado. Seus dados continuam salvos.'); });
   $('vault-reset').addEventListener('click', () => {
     if (!globalThis.confirm('Apagar todos os compradores, cartões, CVVs salvos e o histórico financeiro? Não é possível desfazer. O contato, os perfis de navegação e as marcações de CPF serão mantidos.')) return;
-    void run(async () => { await wallet.reset(); await lock(); exists = false; }, 'Cofre apagado. Crie uma nova senha para recomeçar.');
+    void run(async () => { await wallet.reset(); await lock(); exists = false; }, 'Cofre apagado. Crie um novo PIN para recomeçar.');
   });
   $('buyer-form').addEventListener('submit', event => {
     event.preventDefault(); void run(async () => {

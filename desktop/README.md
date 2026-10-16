@@ -6,8 +6,8 @@ A marca e a logo Submundo / 808 aparecem no painel e nos ícones do Windows. A i
 
 ## Usar e atualizar
 
-1. Feche a versão anterior e execute `Submundo-Compras-0.3.1-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados das versões 0.1/0.2/0.3 permanecem no mesmo diretório: use a senha existente, sem apagar o cofre. Os cartões antigos começam sem limite informado e sem CVV salvo.
-2. Desbloqueie o cofre ou crie uma senha no primeiro uso. Em **Contato e ajustes**, salve e-mail e telefone.
+1. Feche a versão anterior e execute `Submundo-Compras-0.4.0-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados das versões 0.1/0.2/0.3 permanecem no mesmo diretório: use a senha existente uma vez, sem apagar o cofre, e depois defina seu PIN de 4 números em **Contato e ajustes → PIN do cofre**. Os cartões antigos começam sem limite informado e sem CVV salvo.
+2. Desbloqueie o cofre com o PIN ou crie um PIN de exatamente 4 números no primeiro uso. Em **Contato e ajustes**, salve e-mail e telefone.
 3. Em **Compradores**, use **Novo comprador** para cadastrar nome, CPF e nascimento. Em **Cartões**, use **Novo cartão** para cadastrar número, titular, validade, endereço e limite disponível. A gravação de CVV é opcional por cartão: informe o código e marque **Salvar o CVV no cofre deste cartão**.
 4. Em **Perfis de navegação**, informe um prefixo e a quantidade (por exemplo, 15) e clique em **Criar perfis**. Você pode manter até 100 perfis, criando até 50 por vez. **Usar este perfil** abre a Meaple na sessão escolhida. Faça login, escolha ingressos e avance ao checkout.
 5. Em **Comprar**, confira o perfil e a janela de destino, selecione comprador e cartão e confira a última utilização do CPF. O CVV salvo é carregado após desbloquear; se não estiver salvo, informe-o. Escolha parcelas e, se souber, o valor total. Clique em **Preencher checkout**.
@@ -28,11 +28,21 @@ O preenchimento cria um registro **Aguardando confirmação**, salvo no cofre. M
 
 **Desfazer registro**, no histórico, devolve o valor ao controle uma única vez, mantendo o registro como desfeito. Isso não cancela ou estorna pagamentos no banco. Para ajustar compras externas ou o pagamento da fatura, edite o cartão e informe o **disponível atual**: o programa ajusta o saldo e preserva o histórico, sem descontar novamente compras anteriores. Valores são calculados em centavos inteiros. Saldo projetado negativo é destacado. Cartões com compras pendentes ou confirmadas são preservados para manter o histórico.
 
+## PIN de 4 números e desbloqueio
+
+No aplicativo desktop, novos cofres exigem exatamente quatro dígitos de 0 a 9. Zeros à esquerda são preservados; letras, espaços e PINs com outro comprimento são recusados. Não há PIN padrão. Escolha e confirme seu próprio PIN no programa, sem enviá-lo no chat.
+
+Para atualizar um cofre já existente, entre com a senha anterior. A tela **Contato e ajustes** abrirá a seção **PIN do cofre** para definir e repetir o novo PIN. A troca recriptografa atomicamente os dados com novo salt e nova chave, preservando compradores, cartões, CVVs opcionais, limites e histórico. Se a gravação falhar, o acesso anterior continua válido. Depois da troca, use somente o novo PIN. Também é possível trocá-lo posteriormente nessa seção, com o cofre desbloqueado.
+
+O cofre permanece desbloqueado por até **30 minutos a partir do desbloqueio**, inclusive durante o uso. A atividade e a restauração da sessão não prolongam o prazo. **Bloquear cofre** ou fechar o programa encerra o acesso antes. Ao bloquear, os campos de PIN, dados pessoais e cartões são limpos da interface. Reiniciar o programa exige entrar novamente.
+
+Um PIN de quatro números oferece menos resistência à adivinhação do que uma senha longa. A criptografia AES-GCM e o PBKDF2 com 310.000 iterações continuam ativos. A extensão de navegador mantém sua senha de dez ou mais caracteres e a sessão de 15 minutos; a alteração para PIN/30 minutos é do aplicativo desktop.
+
 ## CVV opcional
 
 O CVV só é persistido se o usuário marcar a opção no cadastro do cartão. Ele fica dentro do mesmo cofre AES-GCM dos demais dados e é carregado no formulário de compra após desbloquear. Ao preencher, o campo temporário é limpo; o CVV salvo permanece no cofre para a próxima compra. Desmarque a opção e salve o cartão para removê-lo. Bloquear ou expirar o cofre limpa os dados sensíveis da interface.
 
-Armazenamento local com criptografia reduz exposição em disco, mas não torna o computador imune a malware ou acesso indevido. A senha do cofre nunca é persistida. A extensão de navegador continua sem salvar CVV; essa opção é específica do aplicativo desktop.
+Armazenamento local com criptografia reduz exposição em disco, mas não torna o computador imune a malware ou acesso indevido. O PIN do cofre nunca é persistido em texto. A extensão de navegador continua sem salvar CVV; essa opção é específica do aplicativo desktop.
 
 ## Última utilização do CPF
 
@@ -42,16 +52,16 @@ A marcação é informativa, como solicitado: não bloqueia o preenchimento e n�
 
 ## Perfis e armazenamento
 
-O cofre utiliza os mesmos módulos da extensão: AES-GCM de 256 bits e chave derivada da senha com PBKDF2-SHA-256, salt aleatório e 310.000 iterações. Cada gravação usa um IV aleatório novo. A senha não é persistida; CVV é salvo apenas por opção explícita, dentro do ciphertext. A sessão desbloqueada fica somente na memória do aplicativo por até 15 minutos e é encerrada ao sair.
+O cofre utiliza os mesmos módulos da extensão: AES-GCM de 256 bits e chave derivada do PIN com PBKDF2-SHA-256, salt aleatório e 310.000 iterações. Cada gravação usa um IV aleatório novo. O PIN não é persistido em texto; CVV é salvo apenas por opção explícita, dentro do ciphertext. A sessão desbloqueada fica somente na memória do aplicativo por até 30 minutos e é encerrada ao sair.
 
-Os arquivos ficam em `%APPDATA%\Meaple Preenchimento\profiles\profiles.json`. E-mail e telefone são locais; compradores, cartões, CVVs opcionais, limites e histórico financeiro ficam no cofre criptografado. Os perfis de navegação e as últimas utilizações ficam no arquivo adjacente `workspace.json`. Os CPFs são indexados por HMAC com uma chave local aleatória; o arquivo não contém o CPF em texto nem dados de cartão. As marcações não fazem parte do cofre criptografado. Os cookies de cada perfil de navegação ficam em uma partição persistente independente, no diretório de dados do aplicativo, separado do Chrome/Edge. O perfil inicial preserva a sessão da versão 0.1. Excluir um perfil fecha suas janelas e limpa o armazenamento web dele. Estes são perfis próprios do aplicativo; ele não se conecta às janelas de Chrome/Edge já abertas nem importa os perfis existentes desses navegadores. Os perfis da extensão precisam ser cadastrados novamente no programa. Se esquecer a senha, será necessário apagar o cofre e cadastrar novos perfis.
+Os arquivos ficam em `%APPDATA%\Meaple Preenchimento\profiles\profiles.json`. E-mail e telefone são locais; compradores, cartões, CVVs opcionais, limites e histórico financeiro ficam no cofre criptografado. Os perfis de navegação e as últimas utilizações ficam no arquivo adjacente `workspace.json`. Os CPFs são indexados por HMAC com uma chave local aleatória; o arquivo não contém o CPF em texto nem dados de cartão. As marcações não fazem parte do cofre criptografado. Os cookies de cada perfil de navegação ficam em uma partição persistente independente, no diretório de dados do aplicativo, separado do Chrome/Edge. O perfil inicial preserva a sessão da versão 0.1. Excluir um perfil fecha suas janelas e limpa o armazenamento web dele. Estes são perfis próprios do aplicativo; ele não se conecta às janelas de Chrome/Edge já abertas nem importa os perfis existentes desses navegadores. Os perfis da extensão precisam ser cadastrados novamente no programa. Se esquecer o PIN (ou a senha anterior, antes de migrar), será necessário apagar o cofre e cadastrar novos perfis.
 
 Os dados selecionados são enviados somente ao formulário da Meaple quando o usuário pede o preenchimento. O site e seu provedor de pagamento recebem esses dados. Não há servidor de perfis, telemetria ou sincronização do aplicativo.
 
 ## Limites da validação
 
 - A versão foi testada em Electron real no Linux e no Windows, com painel, cofre, IPC, navegador próprio e formulário local equivalente aos prints. Inclui criação de 16 perfis, isolamento de cookies e localStorage entre perfis, compartilhamento entre janelas do mesmo perfil, escolha da janela de destino, horário por CPF duplicado, marcação/desmarcação manual, reinício do processo, persistência criptografada, CVV opcional com remoção ao desmarcar, limites, confirmação idempotente de compra, reversão, pendências após reiniciar, limpeza na expiração do cofre e preenchimento sem finalizar compra.
-- O workflow `.github/workflows/windows-desktop.yml` passou no Windows e gerou o artefato **Submundo-Windows-x64**, com executável e checksum. As execuções e os downloads ficam em https://github.com/dfelip007/Sub/actions/workflows/windows-desktop.yml. Escolha a execução bem-sucedida mais recente da versão 0.3.1. Entre no GitHub, abra a seção **Artifacts** no fim da página, baixe o pacote e extraia o ZIP. O teste completo usa Electron antes do empacotamento; o launcher portátil gerado não foi aberto separadamente pela automação.
+- O workflow `.github/workflows/windows-desktop.yml` passou no Windows e gerou o artefato **Submundo-Windows-x64**, com executável e checksum. As execuções e os downloads ficam em https://github.com/dfelip007/Sub/actions/workflows/windows-desktop.yml. Escolha a execução bem-sucedida mais recente da versão 0.4. Entre no GitHub, abra a seção **Artifacts** no fim da página, baixe o pacote e extraia o ZIP. O teste completo usa Electron antes do empacotamento; o launcher portátil gerado não foi aberto separadamente pela automação.
 - O checkout autenticado da Meaple, pagamento real e autenticação bancária não foram testados. O acesso à Meaple foi bloqueado pelo proxy do ambiente. O aplicativo usa uma sessão própria, e o site pode exigir novo login ou validação de acesso.
 - Campos em iframes de provedores de pagamento ainda exigem adaptação ao DOM real. A presença de iframe é indicada nas pendências.
 - O executável ainda não possui assinatura digital de distribuição. Não há certificado ou credencial embutidos.

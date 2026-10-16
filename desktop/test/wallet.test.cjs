@@ -7,7 +7,8 @@ const vm = require('node:vm');
 const os = require('node:os');
 const { webcrypto } = require('node:crypto');
 const { Store } = require('../app/store.cjs');
-const password = 'senha-ficticia-para-teste';
+const password = '0042';
+const legacyPassword = 'senha-ficticia-para-teste';
 const card = { cardNumber: '0000000000001111', cardHolder: 'PESSOA TESTE', cardExpiry: '12/30', country: 'Brasil', cardCvv: '987' };
 async function fixture(run) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'meaple-wallet-'));
@@ -17,7 +18,7 @@ async function fixture(run) {
   const area = name => ({ get: key => store.get(name, key), set: values => store.update(name, values), remove: key => store.update(name, key, true), async setAccessLevel() {} });
   const storage = { local: area('local'), session: area('session') };
   const { Wallet, cents } = context.CheckoutWallet;
-  try { await run({ wallet: new Wallet(storage), Core: context.CheckoutVault.Vault, Wallet, cents, storage, store }); }
+  try { await run({ wallet: new Wallet(storage), Core: context.CheckoutVault.Vault, Wallet, cents, storage, store, context }); }
   finally { store.close(); await fs.rm(directory, { recursive: true, force: true }); }
 }
 test('valores brasileiros viram centavos exatos e formatos ambíguos inválidos são recusados', () => fixture(async ({ cents }) => {
@@ -26,9 +27,12 @@ test('valores brasileiros viram centavos exatos e formatos ambíguos inválidos 
   assert.equal(cents('-1,25', true), -125);
 }));
 test('migra cofre 0.2, salva CVV só por opção e mantém CVV, limite e histórico criptografados', () => fixture(async ({ wallet, Core, Wallet, storage, store }) => {
-  const old = new Core(storage); await old.create(password);
+  const old = new Core(storage); await old.create(legacyPassword);
   const oldId = await old.save('cards', '', 'Legado', card);
-  await old.lock(); await wallet.unlock(password);
+  await old.lock(); await wallet.unlock(legacyPassword);
+  assert.equal(wallet.pinConfigured, false);
+  await wallet.changePassword(password);
+  assert.equal(wallet.pinConfigured, true);
   assert.equal(wallet.cards()[0].id, oldId);
   assert.equal(wallet.cards()[0].values.cardCvv, undefined);
   assert.equal(wallet.summary(oldId).available, null);
@@ -38,7 +42,7 @@ test('migra cofre 0.2, salva CVV só por opção e mantém CVV, limite e histór
   await assert.rejects(wallet.saveCard('', 'Mesmo cartão com outro nome', card, { available: '1.000,00' }), /já está cadastrado/);
   assert.equal(wallet.cards().length, 1);
   const disk = await fs.readFile(store.filename, 'utf8');
-  for (const value of ['0000000000001111', 'cardCvv', 'budgetCents', 'PESSOA TESTE', password]) assert.equal(disk.includes(value), false);
+  for (const value of ['0000000000001111', 'cardCvv', 'budgetCents', 'PESSOA TESTE', legacyPassword]) assert.equal(disk.includes(value), false);
   await wallet.lock(); const reopened = new Wallet(storage); await reopened.unlock(password);
   assert.equal(reopened.cards()[0].values.cardCvv, '987');
   await reopened.saveCard(oldId, 'Principal', card, { saveCvv: false, available: '1.000,00' });
@@ -97,4 +101,67 @@ test('falha de gravação não altera limite nem confirmação e a mesma operaç
   storage.local.set = set;
   await wallet.confirmOrder(order, '0,10');
   assert.equal(wallet.summary(id).available, 90);
+}));
+test('PIN aceita somente quatro números e mantém zeros à esquerda após reiniciar', () => fixture(async ({ wallet, Wallet, storage }) => {
+  for (const pin of ['', '123', '12345', 'abcd', '12 3', '12a4', '１２３４']) await assert.rejects(wallet.create(pin), /4 números/);
+  await wallet.create('0042');
+  assert.equal(wallet.envelope.credential, 'pin4');
+  const id = await wallet.saveCard('', 'Principal', card, { saveCvv: true, available: '1.000,00' });
+  await wallet.lock();
+  const reopened = new Wallet(storage);
+  await assert.rejects(reopened.unlock('42'), /4 números/);
+  await assert.rejects(reopened.unlock('0043'), /PIN incorreto/);
+  await reopened.unlock('0042');
+  assert.equal(reopened.cards()[0].id, id);
+  assert.equal(reopened.cards()[0].values.cardCvv, card.cardCvv);
+}));
+test('troca de senha por PIN preserva compradores, CVV, limite e histórico; falha preserva senha anterior', () => fixture(async ({ wallet, Core, Wallet, storage, store }) => {
+  const old = new Core(storage); await old.create(legacyPassword);
+  await old.save('buyers', '', 'Daniel', { buyerName: 'Daniel Teste', cpf: '00000000000', birthDate: '01/02/1990' });
+  await old.lock(); await wallet.unlock(legacyPassword);
+  const cardId = await wallet.saveCard('', 'Principal', card, { available: '1.000,00', saveCvv: true });
+  const order = await wallet.stageOrder({ scope: 'migration', cardId, buyer: 'Daniel', amount: '123,45' });
+  await wallet.confirmOrder(order, '123,45', 'COMPRA-1');
+  const before = JSON.stringify({ buyers: wallet.list('buyers'), cards: wallet.cards(), orders: wallet.orders() });
+  const disk = await fs.readFile(store.filename, 'utf8');
+  const write = storage.local.set;
+  storage.local.set = async () => { throw new Error('disco sem espaço'); };
+  await assert.rejects(wallet.changePassword('0042'), /disco sem espaço/);
+  assert.equal(await fs.readFile(store.filename, 'utf8'), disk);
+  assert.equal(wallet.pinConfigured, false);
+  storage.local.set = write;
+  // A normal vault write queued with the rotation must not disappear.
+  await Promise.all([wallet.save('buyers', '', 'Outro', { buyerName: 'Outro Teste', cpf: '11111111111', birthDate: '01/02/1990' }), wallet.changePassword('0042')]);
+  assert.equal(wallet.pinConfigured, true);
+  assert.equal(wallet.list('buyers').length, 2);
+  const migrated = JSON.stringify({ buyers: wallet.list('buyers').slice(0, 1), cards: wallet.cards(), orders: wallet.orders() });
+  assert.equal(migrated, before);
+  await wallet.lock(); const reopened = new Wallet(storage);
+  await assert.rejects(reopened.unlock(legacyPassword), /4 números/);
+  await reopened.unlock('0042');
+  assert.equal(reopened.summary(cardId).available, 87655);
+  assert.equal(reopened.orders()[0].reference, 'COMPRA-1');
+  assert.equal(reopened.cards()[0].values.cardCvv, '987');
+  await reopened.changePassword('0073');
+  await reopened.lock();
+  await assert.rejects(reopened.unlock('0042'), /PIN incorreto/);
+  await reopened.unlock('0073');
+  assert.equal(reopened.list('buyers').length, 2);
+}));
+test('sessão desktop dura 30 minutos e restaurar aos 29 minutos não prolonga o prazo', () => fixture(async ({ wallet, Wallet, storage, store, context }) => {
+  const clock = { now: Date.now() };
+  context.Date = class extends Date { static now() { return clock.now; } };
+  await wallet.create('0042');
+  const deadline = clock.now + 30 * 60 * 1000;
+  assert.equal(wallet.expiresAt, deadline);
+  assert.equal((await store.get('session', 'checkoutVaultSession')).checkoutVaultSession.expiresAt, deadline);
+  clock.now += 29 * 60 * 1000;
+  const restored = new Wallet(storage);
+  assert.equal(await restored.restore(), true);
+  assert.equal(restored.unlocked, true);
+  assert.equal(restored.expiresAt, deadline);
+  clock.now = deadline + 1;
+  assert.equal(restored.unlocked, false);
+  assert.equal(await new Wallet(storage).restore(), false);
+  assert.deepEqual(await store.get('session'), {});
 }));

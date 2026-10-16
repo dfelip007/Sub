@@ -309,6 +309,51 @@ const root = path.resolve(__dirname, '../..');
     await reopened.waitForFunction(() => !document.querySelector('#vault-panel').hidden && document.querySelector('[name=cardNumber]').value === '');
     assert.equal(await reopened.locator('[name=savedCvv]').inputValue(), '');
     assert.equal(await reopened.locator('#purchase-cvv').inputValue(), '');
+    // Open one event in all 16 profiles, even with the vault locked. Existing
+    // carts stay untouched, repeat clicks reuse event windows, cookies stay isolated.
+    await restoredSite.locator('input[placeholder="Nome Completo"]').fill('Carrinho preservado');
+    const beforeBulk = await reopened.evaluate(() => desktopBridge.checkout());
+    await reopened.locator('.sidebar [data-view=browsers]').click();
+    await reopened.locator('#browser-event-link').fill('https://meaple.com.br.evil.invalid/evento');
+    await reopened.locator('#view-browsers [data-open-all]').click();
+    await reopened.waitForFunction(() => document.querySelector('#message').textContent.includes('link HTTPS da Meaple'));
+    assert.equal((await reopened.evaluate(() => desktopBridge.checkout())).tabs.length, beforeBulk.tabs.length);
+    const eventUrl = 'http://127.0.0.1:8080/evento/submundo?lote=1';
+    await reopened.locator('#browser-event-link').fill(eventUrl);
+    assert.equal(await reopened.locator('#event-link').inputValue(), eventUrl);
+    await reopened.locator('#view-browsers [data-open-all]').click();
+    await reopened.waitForFunction(async () => { const state = await desktopBridge.checkout(); return state.launch.processed === 16 && !state.launch.running && !document.querySelector('#view-browsers [data-open-all]').disabled; });
+    const bulk = await reopened.evaluate(() => desktopBridge.checkout());
+    assert.equal(bulk.launch.created, 16); assert.equal(bulk.launch.reused, 0); assert.deepEqual(bulk.launch.failed, []);
+    assert.equal(bulk.profileId, beforeBulk.profileId); assert.equal(bulk.tab.id, beforeBulk.tab.id);
+    assert.equal(bulk.tabs.length, beforeBulk.tabs.length + 16);
+    // The native state initially reports in-flight URLs as HOME, so wait for
+    // actual navigation before checking one event window per profile.
+    await reopened.waitForFunction(async url => { const state = await desktopBridge.checkout(); return state.tabs.filter(tab => tab.url === url).length === 16 && state.tabs.filter(tab => tab.url === url).every(tab => !tab.loading); }, eventUrl);
+    const loaded = await reopened.evaluate(() => desktopBridge.checkout());
+    for (const profile of loaded.profiles) assert.equal(loaded.tabs.filter(tab => tab.profileId === profile.id && tab.url === eventUrl).length, 1);
+    assert.equal(restoredSite.url(), 'http://127.0.0.1:8080/checkout.html');
+    assert.equal(await restoredSite.locator('input[placeholder="Nome Completo"]').inputValue(), 'Carrinho preservado');
+    const cookies = await instance.evaluate(async ({ webContents }, { tabs, url }) => Promise.all(tabs.map(async tab => ({ profileId: tab.profileId, cookies: await webContents.fromId(tab.id).session.cookies.get({ url }) }))), { tabs: loaded.tabs.filter(tab => tab.url === eventUrl), url: eventUrl });
+    for (const item of cookies) {
+      const value = item.cookies.find(cookie => cookie.name === 'profile_test')?.value;
+      assert.equal(value, item.profileId === 'legacy' ? 'first' : item.profileId === selectedProfile ? 'second' : undefined);
+    }
+    // Enter in the link field also launches; it must not submit the buyer form.
+    await reopened.locator('.sidebar [data-view=buy]').click();
+    await reopened.locator('#event-link').press('Enter');
+    await reopened.waitForFunction(async () => { const state = await desktopBridge.checkout(); return state.launch.created === 0 && state.launch.reused === 16 && !state.launch.running; });
+    assert.deepEqual((await reopened.evaluate(() => desktopBridge.checkout())).tabs.map(tab => tab.id).sort(), loaded.tabs.map(tab => tab.id).sort());
+    const advancedId = loaded.tabs.find(tab => tab.url === eventUrl && tab.profileId === selectedProfile).id;
+    const advanced = await findWindow(advancedId);
+    await advanced.goto('http://127.0.0.1:8080/checkout/carrinho-em-andamento');
+    await advanced.locator('input[placeholder="Nome Completo"]').fill('Outro carrinho preservado');
+    await reopened.locator('#view-buy [data-open-all]').click();
+    await reopened.waitForFunction(async () => { const state = await desktopBridge.checkout(); return state.launch.created === 1 && state.launch.reused === 15 && !state.launch.running; });
+    assert.equal((await reopened.evaluate(() => desktopBridge.checkout())).tabs.length, loaded.tabs.length + 1);
+    assert.equal(await advanced.locator('input[placeholder="Nome Completo"]').inputValue(), 'Outro carrinho preservado');
+    assert.equal(advanced.url(), 'http://127.0.0.1:8080/checkout/carrinho-em-andamento');
+    await reopened.screenshot({ path: path.join(root, 'test-results/desktop-open-all.png'), fullPage: true });
     // Narrow window must keep all navigation/actions accessible without horizontal scrolling.
     await instance.evaluate(({ BrowserWindow }) => { const panel = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().startsWith('app://')); panel.setSize(780, 760); });
     await reopened.waitForFunction(() => window.innerWidth < 800);
@@ -363,7 +408,7 @@ require(${JSON.stringify(path.join(root, 'desktop/app/main.cjs'))});`);
     await branded.locator('.sidebar [data-view=buy]').click();
     await branded.locator('#card-profile').selectOption({ label: 'Principal · final 1111' });
     assert.match(await branded.locator('#buy-balance').textContent(), /876,55/);
-    console.log('PASS: Electron real: leitura de evento, lotes, quantidade, valores e total; estoque apenas após pagamento registrado; rateio exato, preço de revenda e CSV sem cartão/CPF; edição de lote preserva limite; rascunhos isolados por janela e persistência criptografada após reiniciar; contador automático por janela com cofre bloqueado, atualização, urgência, expiração, ausência, navegação, exclusão de provedor externo, seleção e fechamento; layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores; PIN com zero à esquerda e migração da senha antiga sem perda de dados.');
+    console.log('PASS: Electron real: abrir evento nos 16 perfis com cofre bloqueado, link validado, cookies isolados, seleção/carrinhos preservados, repetição sem duplicar e Enter sem preencher; leitura de evento, lotes, quantidade, valores e total; estoque apenas após pagamento registrado; rateio exato, preço de revenda e CSV sem cartão/CPF; edição de lote preserva limite; rascunhos isolados por janela e persistência criptografada após reiniciar; contador automático por janela com cofre bloqueado, atualização, urgência, expiração, ausência, navegação, exclusão de provedor externo, seleção e fechamento; layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores; PIN com zero à esquerda e migração da senha antiga sem perda de dados.');
   } catch (error) {
     const panel = instance?.windows().find(page => page.url() === 'app://manager/popup.html');
     if (panel) { await panel.screenshot({ path: path.join(root, 'test-results/desktop-error.png'), fullPage: true }).catch(() => {}); console.error('UI:', await panel.locator('#message').textContent().catch(() => '')); }

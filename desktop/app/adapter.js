@@ -40,17 +40,20 @@
     window.scrollTo({ top: 0 });
   }
   function controls() {
-    for (const control of document.querySelectorAll('button')) control.disabled = busy;
-    for (const control of document.querySelectorAll('#buyer-form button,#card-form button,[data-new],#import')) control.disabled = busy || !wallet.unlocked;
-    $('purchase-fields').disabled = busy || !wallet.unlocked;
-    $('pin-fields').disabled = busy || !wallet.unlocked;
-    $('ticket-edit-fields').disabled = busy || !wallet.unlocked;
-    $('tickets-export').disabled = busy || !wallet.unlocked;
-    for (const control of document.querySelectorAll('#tickets-stock input,#tickets-stock button')) control.disabled = busy || !wallet.unlocked;
-    $('buyer-profile').disabled = $('card-profile').disabled = busy || !wallet.unlocked;
-    $('desktop-profile').disabled = busy || !state;
-    $('desktop-target').disabled = busy || !state?.tab;
-    $('desktop-used').disabled = busy || !selectedBuyer();
+    const working = busy || Boolean(state?.launch?.running);
+    for (const control of document.querySelectorAll('button')) control.disabled = working;
+    for (const control of document.querySelectorAll('#buyer-form button,#card-form button,[data-new],#import')) control.disabled = working || !wallet.unlocked;
+    $('purchase-fields').disabled = working || !wallet.unlocked;
+    $('pin-fields').disabled = working || !wallet.unlocked;
+    $('ticket-edit-fields').disabled = working || !wallet.unlocked;
+    $('tickets-export').disabled = working || !wallet.unlocked;
+    for (const control of document.querySelectorAll('#tickets-stock input,#tickets-stock button')) control.disabled = working || !wallet.unlocked;
+    $('buyer-profile').disabled = $('card-profile').disabled = working || !wallet.unlocked;
+    $('desktop-profile').disabled = working || !state;
+    $('desktop-target').disabled = working || !state?.tab;
+    $('desktop-used').disabled = working || !selectedBuyer();
+    for (const input of document.querySelectorAll('[data-event-link]')) input.disabled = working;
+    for (const control of document.querySelectorAll('[data-open-all]')) control.disabled = working || !state?.profiles.length;
   }
   async function run(action, success = '') {
     if (busy) return;
@@ -137,6 +140,11 @@
     $('desktop-state').textContent = state.error || (state.loading ? 'Carregando a Meaple…' : state.tab ? 'Somente a janela selecionada acima receberá os dados.' : 'Clique em Abrir / ver Meaple para começar neste perfil.');
     renderTimers();
     syncTicketDraft();
+    const launch = state.launch;
+    let launchText = `Cole o link do evento para abrir em ${state.profiles.length} ${state.profiles.length === 1 ? 'perfil' : 'perfis'}.`;
+    if (launch?.running) launchText = `Preparando perfis: ${launch.processed} de ${launch.total}…`;
+    else if (launch?.processed) launchText = `Última abertura: ${launch.created} ${launch.created === 1 ? 'nova janela' : 'novas janelas'} · ${launch.reused} reaproveitadas${launch.failed.length ? ` · Falha ao abrir: ${launch.failed.join(', ')}` : ''}. Confira o carregamento do evento em cada janela.`;
+    for (const label of document.querySelectorAll('[data-launch-state]')) label.textContent = launchText;
     const list = $('browsers-list');
     const signature = JSON.stringify([state.profiles, state.profileId, state.tabs.map(item => [item.id, item.profileId])]);
     if (list.dataset.structure === signature) return;
@@ -367,6 +375,11 @@
   document.addEventListener('click', event => {
     const control = event.target.closest('button'); if (!control || control.disabled) return;
     if (control.dataset.view) navigate(control.dataset.view);
+    if (control.hasAttribute('data-open-all')) void run(async () => {
+      state = await bridge.openAll($('event-link').value);
+      const failed = state.launch.failed;
+      message(failed.length ? `Não foi possível abrir ${failed.length} perfis. Confira a lista de falhas e tente novamente.` : 'Janelas preparadas para todos os perfis. Aguarde o carregamento do evento.', failed.length ? 'error' : 'success');
+    });
     if (control.dataset.new) editor(control.dataset.new);
     if (control.dataset.close) $(control.dataset.close).hidden = true;
     if (control.dataset.editBuyer) editor('buyer', control.dataset.editBuyer);
@@ -472,6 +485,15 @@
   $('desktop-profile').addEventListener('change', () => { void run(async () => { state = await bridge.selectBrowser($('desktop-profile').value); }); });
   $('desktop-target').addEventListener('change', () => { void run(async () => { state = await bridge.selectTab(Number($('desktop-target').value)); }); });
   $('desktop-open').addEventListener('click', () => { void run(async () => { state = await bridge.open(); }); });
+  for (const input of document.querySelectorAll('[data-event-link]')) {
+    input.addEventListener('input', () => {
+      for (const other of document.querySelectorAll('[data-event-link]')) if (other !== input) other.value = input.value;
+    });
+    input.addEventListener('keydown', event => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault(); input.closest('.event-launch').querySelector('[data-open-all]').click();
+    });
+  }
   $('cart-list').addEventListener('click', event => {
     const control = event.target.closest('[data-cart-tab]');
     if (!control) return;

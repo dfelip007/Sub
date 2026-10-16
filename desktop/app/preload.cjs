@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('desktopBridge', {
   tickets: tabId => ipcRenderer.invoke('checkout:tickets', tabId),
   exportTickets: csv => ipcRenderer.invoke('tickets:export', csv),
   open: (newWindow = false) => ipcRenderer.invoke('checkout:open', newWindow),
+  openAll: url => ipcRenderer.invoke('checkout:open-all', url),
   createBrowser: (label, count) => ipcRenderer.invoke('browsers:create', label, count),
   selectBrowser: id => ipcRenderer.invoke('browsers:select', id),
   renameBrowser: (id, label) => ipcRenderer.invoke('browsers:rename', id, label),

@@ -5,7 +5,7 @@ const fsSync = require('node:fs');
 const path = require('node:path');
 const { Store } = require('./store.cjs');
 const { Workspace, partition } = require('./workspace.cjs');
-const { canFill, canNavigate, validateValues } = require('./policy.cjs');
+const { canFill, canNavigate, validateValues, eventUrl } = require('./policy.cjs');
 const { readCartTimer, freshTimer } = require('./cart-timer.cjs');
 const { readTickets } = require('./ticket-reader.cjs');
 const CONTROL_URL = 'app://manager/popup.html';
@@ -36,6 +36,7 @@ let browsing;
 let storage;
 let quitting = false;
 let timerPoll;
+let launch = { running: false, total: 0, processed: 0, created: 0, reused: 0, failed: [] };
 
 const ui = path.join(__dirname, 'ui');
 const safeWeb = { nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, allowRunningInsecureContent: false, webviewTag: false, navigateOnDragDrop: false };
@@ -48,7 +49,7 @@ function state() {
   const selected = activeWindow();
   const tabs = [...windows.values()].map(entry => ({ id: entry.window.webContents.id, profileId: entry.profileId, revision: entry.generation, url: entry.window.webContents.getURL() || HOME, loading: entry.window.webContents.isLoading(), error: entry.error, timer: freshTimer(entry) }));
   const tab = tabs.find(item => item.id === selected?.window.webContents.id) || null;
-  return { profiles: browsing.profiles, profileId: browsing.selected, tabs, tab, loading: tab?.loading || false, error: tab?.error || '' };
+  return { profiles: browsing.profiles, profileId: browsing.selected, tabs, tab, loading: tab?.loading || false, error: tab?.error || '', launch };
 }
 function notify() { if (controller && !controller.isDestroyed()) controller.webContents.send('checkout:changed', state()); }
 function expire() { if (controller && !controller.isDestroyed()) controller.webContents.send('profiles:expired'); }
@@ -95,9 +96,9 @@ function configureSession(profileId) {
 }
 function registerWindow(window, profileId) {
   const id = window.webContents.id;
-  const entry = { window, profileId, error: '', timer: null, timerReadAt: 0, generation: 0, reading: false };
+  const entry = { window, profileId, error: '', navigationUrl: '', timer: null, timerReadAt: 0, generation: 0, reading: false };
   windows.set(id, entry);
-  window.webContents.on('did-start-navigation', (_event, _url, _inPlace, mainFrame) => { if (mainFrame) { resetTimer(entry); notify(); } });
+  window.webContents.on('did-start-navigation', (_event, url, _inPlace, mainFrame) => { if (mainFrame) { entry.navigationUrl = url; resetTimer(entry); notify(); } });
   window.webContents.on('dom-ready', () => { void readTimer(entry); });
   configureSession(profileId);
   window.webContents.on('will-navigate', (event, url) => { if (!canNavigate(url, smoke)) event.preventDefault(); });
@@ -123,6 +124,14 @@ function registerWindow(window, profileId) {
   window.on('closed', () => { windows.delete(id); if (selectedTab === id) selectedTab = null; notify(); });
   return entry;
 }
+function createCheckoutWindow(profileId, url = HOME) {
+  const window = new BrowserWindow({ title: 'Meaple — site', width: 1120, height: 840, minWidth: 780, minHeight: 600, show: false, backgroundColor: '#11131b', webPreferences: { ...safeWeb, partition: partition(profileId) } });
+  const entry = registerWindow(window, profileId);
+  entry.navigationUrl = url;
+  window.once('ready-to-show', () => { if (!window.isDestroyed()) window.showInactive(); });
+  window.loadURL(url).catch(() => {});
+  return entry;
+}
 function openCheckout(profileId = browsing.selected, newWindow = false) {
   if (!browsing.profiles.some(profile => profile.id === profileId)) throw new Error('Perfil de navegação não encontrado.');
   const selected = windows.get(selectedTab);
@@ -135,13 +144,43 @@ function openCheckout(profileId = browsing.selected, newWindow = false) {
       existing.window.loadURL(canNavigate(url, smoke) ? url : HOME).catch(() => {});
     }
   } else {
-    const window = new BrowserWindow({ title: 'Meaple — site', width: 1120, height: 840, minWidth: 780, minHeight: 600, show: false, backgroundColor: '#11131b', webPreferences: { ...safeWeb, partition: partition(profileId) } });
-    registerWindow(window, profileId);
-    if (profileId === browsing.selected) selectedTab = window.webContents.id;
-    window.once('ready-to-show', () => { if (!window.isDestroyed()) window.showInactive(); });
-    window.loadURL(HOME).catch(() => {});
+    const entry = createCheckoutWindow(profileId);
+    if (profileId === browsing.selected) selectedTab = entry.window.webContents.id;
   }
   notify();
+  return state();
+}
+async function openAllProfiles(value) {
+  if (launch.running) throw new Error('Aguarde a abertura dos perfis terminar.');
+  const url = eventUrl(value, smoke);
+  const profiles = [...browsing.profiles];
+  launch = { running: true, total: profiles.length, processed: 0, created: 0, reused: 0, failed: [] };
+  notify();
+  try {
+    for (const profile of profiles) {
+      if (quitting) break;
+      try {
+        const existing = [...windows.values()].find(entry => {
+          if (entry.profileId !== profile.id || entry.window.isDestroyed()) return false;
+          const contents = entry.window.webContents;
+          const target = contents.isLoadingMainFrame() ? entry.navigationUrl : contents.getURL() || entry.navigationUrl;
+          return target === url;
+        });
+        if (existing) {
+          existing.window.showInactive();
+          if (existing.error) { existing.error = ''; existing.window.loadURL(url).catch(() => {}); }
+          launch.reused++;
+        } else { createCheckoutWindow(profile.id, url); launch.created++; }
+      } catch { launch.failed.push(profile.label); }
+      launch.processed++;
+      // Start navigation immediately; yield between small groups so the panel
+      // stays responsive. Never wait for one site's network load to open others.
+      if (launch.processed % 4 === 0) { notify(); await new Promise(resolve => setImmediate(resolve)); }
+    }
+  } finally {
+    launch.running = false; notify();
+    if (!quitting && controller && !controller.isDestroyed()) { controller.show(); controller.focus(); }
+  }
   return state();
 }
 function handlers() {
@@ -165,6 +204,7 @@ function handlers() {
     return result;
   });
   handle('checkout:open', (newWindow = false) => openCheckout(browsing.selected, newWindow === true));
+  handle('checkout:open-all', value => openAllProfiles(value));
   handle('browsers:create', async (label, count) => { browsing = await workspace.create(label, count); selectedTab = null; notify(); return state(); });
   handle('browsers:select', async id => { browsing = await workspace.select(id); selectedTab = null; notify(); return state(); });
   handle('browsers:rename', async (id, label) => { browsing = await workspace.rename(id, label); notify(); return state(); });

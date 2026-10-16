@@ -10,6 +10,16 @@ function canNavigate(url, demo = false) {
   try { return new URL(url).protocol === 'https:' || demo && new URL(url).origin === 'http://127.0.0.1:8080' || url === 'about:blank'; }
   catch { return false; }
 }
+function eventUrl(value, demo = false) {
+  const invalid = () => { throw new Error('Cole um link HTTPS da Meaple, como https://meaple.com.br/evento.'); };
+  if (typeof value !== 'string' || value.length > 2048) return invalid();
+  const clean = value.trim();
+  if (!clean || /[\u0000-\u0020\u007f]/.test(clean)) return invalid();
+  let parsed;
+  try { parsed = new URL(clean); } catch { return invalid(); }
+  if (parsed.username || parsed.password || !canFill(parsed.href, demo) || (parsed.protocol === 'https:' && parsed.port)) return invalid();
+  return parsed.href;
+}
 function validateValues(values) {
   if (!values || typeof values !== 'object' || Array.isArray(values)) throw new Error('Dados de preenchimento inválidos.');
   const clean = {};
@@ -19,4 +29,4 @@ function validateValues(values) {
   }
   return clean;
 }
-module.exports = { canFill, canNavigate, validateValues };
+module.exports = { canFill, canNavigate, validateValues, eventUrl };

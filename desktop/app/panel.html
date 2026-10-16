@@ -15,7 +15,7 @@
       <button type="button" data-view="tickets"><span>▧</span> Ingressos e revenda</button>
       <button type="button" data-view="settings"><span>⚙︎</span> Contato e ajustes</button>
     </nav>
-    <div class="sidebar-bottom"><span class="local-dot"></span> Dados neste computador<p>Seu cofre, seus cadastros.<br>Versão 0.6.0</p></div>
+    <div class="sidebar-bottom"><span class="local-dot"></span> Dados neste computador<p>Seu cofre, seus cadastros.<br>Versão 0.7.0</p></div>
   </aside>
   <main>
     <header class="page-header"><div><p class="eyebrow">ORGANIZE. PREENCHA. CONFIRA.</p><h1 id="page-title">Uma compra de cada vez.</h1><p id="page-subtitle">Escolha o perfil, o comprador e o cartão. O resto fica mais rápido.</p></div><div class="vault-controls"><span id="vault-state" class="pill">Carregando…</span><button id="vault-lock" type="button" class="quiet" hidden>Bloquear cofre</button></div></header>
@@ -29,6 +29,7 @@
       <form id="checkout" autocomplete="off" novalidate>
         <section class="surface"><div class="section-heading"><h2><span class="step">1</span> Onde você vai comprar?</h2><button type="button" data-view="browsers" class="text-button">Gerenciar perfis →</button></div>
           <div class="destination-row"><label>Perfil de navegação<select id="desktop-profile"></select></label><label>Janela que será preenchida<select id="desktop-target"></select></label><button type="button" id="desktop-open" class="secondary">Abrir / ver Meaple ↗︎</button></div><p id="desktop-state" class="hint" role="status">Carregando perfis…</p>
+          <div class="event-launch"><label>Link do evento para todos os perfis<input id="event-link" data-event-link type="url" maxlength="2048" placeholder="https://meaple.com.br/…" autocomplete="off"></label><button type="button" data-open-all>Abrir todos os perfis ↗︎</button><p data-launch-state class="hint" role="status">Cole o link do evento para abrir em todos os perfis cadastrados.</p></div>
           <div id="cart-clock" class="cart-clock" data-urgency="unknown"><div><span class="eyebrow">TEMPO DO CARRINHO SELECIONADO</span><strong id="cart-time" role="timer" aria-live="off">—</strong></div><div><strong id="cart-time-state">Aguardando checkout</strong><p id="cart-time-help">Abra o checkout para consultar o contador da Meaple.</p></div></div>
           <details id="cart-overview"><summary id="cart-overview-title">Tempos das janelas abertas</summary><p class="hint">Cada tempo pertence ao perfil e à janela indicados. Escolha uma janela para atendê-la.</p><div id="cart-list" class="cart-list"></div></details>
         </section>
@@ -64,6 +65,7 @@
       </section>
     </section>
     <section id="view-browsers" class="view" hidden>
+      <section class="surface"><h2>O mesmo evento em todos os perfis</h2><div class="event-launch"><label>Link do evento na Meaple<input id="browser-event-link" data-event-link type="url" maxlength="2048" placeholder="https://meaple.com.br/…" autocomplete="off"></label><button type="button" data-open-all>Abrir todos os perfis ↗︎</button><p data-launch-state class="hint" role="status">Cole o link do evento para abrir em todos os perfis cadastrados.</p></div><p class="hint">Os logins ficam separados. Janelas que já estejam no link são reaproveitadas; seus carrinhos e as outras janelas continuam abertos.</p></section>
       <section class="surface"><h2>Um perfil para cada sessão</h2><p class="hint">Cada perfil mantém seu próprio login na Meaple. Crie vários de uma vez e abra quando precisar.</p><form id="browser-form"><div class="grid"><label>Nome ou prefixo<input id="desktop-label" maxlength="70" placeholder="Ex.: Compras" required></label><label>Quantidade<input id="desktop-quantity" type="number" min="1" max="50" value="1" required></label></div><button type="submit" id="desktop-create">Criar perfis</button></form></section>
       <div class="section-heading"><h2>Seus perfis</h2><span id="desktop-count" class="hint"></span></div><div id="browsers-list" class="record-list"></div>
       <section class="surface"><h2>Perfil selecionado</h2><p id="selected-browser-label"></p><label>Novo nome<input id="browser-rename-label" maxlength="80" placeholder="Nome do perfil"></label><div class="actions"><button type="button" id="desktop-rename" class="secondary">Renomear</button><button type="button" id="desktop-new-window" class="secondary">Nova janela neste perfil</button><button type="button" id="desktop-delete" class="danger quiet">Excluir perfil</button></div></section>

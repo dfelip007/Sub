@@ -25,8 +25,24 @@ function readQueuePage(document) {
   return { kind: 'unknown' };
 }
 
+// Event pages use /organizer-number/event-slug. Explicit links supplied to
+// Open all profiles also work when their route follows a different format.
+class EventRoutes {
+  constructor(smoke = false) { this.smoke = smoke; this.known = new Set(); }
+  key(value) {
+    if (!canFill(value, this.smoke)) return null;
+    const url = new URL(value);
+    if (url.username || url.password || url.protocol === 'https:' && url.port) return null;
+    const path = url.pathname.replace(/\/+$/, '');
+    if (!path || /^\/\d+$/.test(path) || /\/(?:orders|checkout(?:\.html)?|cart|carrinho|pagamento|login|accounts|admin|sala-de-espera|fila-de-espera|waiting-room|queue)(?:\/|$)/i.test(path)) return null;
+    return { key: `${url.origin}${path}`, path };
+  }
+  remember(value) { const route = this.key(value); if (route) this.known.add(route.key); }
+  has(value) { const route = this.key(value); return Boolean(route && (this.known.has(route.key) || /^\/\d+\/[a-z0-9][a-z0-9-]*$/i.test(route.path))); }
+}
+
 class QueueStatus {
-  constructor(smoke = false) { this.smoke = smoke; this.status = 'unknown'; this.waiting = null; }
+  constructor(smoke = false, events = new EventRoutes(smoke)) { this.smoke = smoke; this.events = events; this.status = 'unknown'; this.waiting = null; }
   observe(reading, value) {
     if (!canFill(value, this.smoke)) return this.status = 'outside';
     const url = new URL(value);
@@ -38,12 +54,16 @@ class QueueStatus {
       this.waiting = { key, name: title.split(/\b(?:sala de espera|fila de espera|waiting room)\b/)[0].trim() };
       return this.status = 'waiting';
     }
+    if (['checkout', 'error'].includes(reading?.kind)) return this.status = reading.kind;
+    // The user's event URL is sufficient; do not require a specific button or
+    // heading. Waiting/error signals above still take priority at the same URL.
+    if (this.events.has(value)) return this.status = 'available';
     if (reading?.kind === 'event') {
       const names = [title, ...(reading.headings || []).map(normalize)];
       const sameEvent = this.waiting && (this.waiting.key === key || this.waiting.name.length >= 4 && names.some(name => ` ${name} `.includes(` ${this.waiting.name} `)));
       return this.status = sameEvent ? 'released' : 'event';
     }
-    return this.status = ['checkout', 'error'].includes(reading?.kind) ? reading.kind : 'unknown';
+    return this.status = 'unknown';
   }
 }
-module.exports = { readQueuePage, QueueStatus };
+module.exports = { readQueuePage, QueueStatus, EventRoutes };

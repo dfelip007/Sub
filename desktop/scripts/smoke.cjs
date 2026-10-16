@@ -23,6 +23,7 @@ const root = path.resolve(__dirname, '../..');
     if (/^\/(stories|p|reel)\//.test(pathname)) { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end('<h1>Instagram fictício — conteúdo</h1>'); return; }
     if (/^\/orders(?:\/|$)/.test(pathname)) { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end('<h1>Dados do Comprador</h1><p>Checkout fictício sem contador visível.</p>'); return; }
     if (pathname === '/808/evento-teste') { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end('<title>SUBMUNDO 808 — Meaple</title><h1>SUBMUNDO 808</h1><button>Comprar ingressos</button>'); return; }
+    if (pathname === '/808/submundo-808-curitiba-pr') { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end('<title>SUBMUNDO 808 — Curitiba</title><p>Página fictícia sem botão de compra reconhecível.</p>'); return; }
     response.setHeader('Content-Type', request.url === '/demo.js' ? 'application/javascript' : 'text/html; charset=utf-8');
     response.end(request.url === '/demo.js' ? demoScript : fixture);
   });
@@ -96,15 +97,23 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await instance.evaluate(({ app }) => app.getName()), 'Submundo Compras');
     panel.on('dialog', dialog => dialog.accept());
     const nav = async view => panel.locator(`.sidebar [data-view=${view}]`).click();
+    await site.goto('http://127.0.0.1:8080/808/submundo-808-curitiba-pr');
+    await waitCheckout(panel, state => state.tab.queue === 'available');
+    await panel.waitForFunction(() => document.querySelector('#cart-list .queue-status')?.textContent === 'Disponível');
+    await nav('browsers');
+    await panel.waitForFunction(() => document.querySelector('[data-browser-profile="legacy"] .profile-queue')?.textContent === 'Disponível');
+    await panel.screenshot({ path: path.join(root, 'test-results/desktop-available.png'), fullPage: true });
+    await nav('buy');
+    assert.match(await panel.locator('#desktop-profile option:checked').textContent(), /Disponível/);
     await site.evaluate(() => { document.title = 'SUBMUNDO 808 — Sala de espera - meaple.com.br/808/submundo'; });
     await waitCheckout(panel, state => state.tab.queue === 'waiting');
     await panel.waitForFunction(() => document.querySelector('#cart-list .queue-status')?.textContent === 'Na sala de espera');
     await site.goto('http://127.0.0.1:8080/808/evento-teste');
-    await waitCheckout(panel, state => state.tab.queue === 'released');
-    await panel.waitForFunction(() => document.querySelector('#cart-list .queue-status').textContent === 'Liberado para o evento');
+    await waitCheckout(panel, state => state.tab.queue === 'available');
+    await panel.waitForFunction(() => document.querySelector('#cart-list .queue-status').textContent === 'Disponível');
     await site.evaluate(() => { document.title = 'Página não encontrada'; });
     await waitCheckout(panel, state => state.tab.queue === 'error');
-    await site.evaluate(() => { document.title = 'Meaple'; document.querySelector('button').remove(); });
+    await site.evaluate(() => { document.title = 'Meaple'; document.querySelector('button').remove(); history.pushState({}, '', '/pagina-desconhecida'); });
     await waitCheckout(panel, state => state.tab.queue === 'unknown');
     await site.evaluate(() => { document.title = 'SUBMUNDO 808 — Sala de espera'; });
     await waitCheckout(panel, state => state.tab.queue === 'waiting');
@@ -503,6 +512,7 @@ const root = path.resolve(__dirname, '../..');
     // actual navigation before checking one event window per profile.
     const loaded = await waitCheckout(reopened, state => state.tabs.filter(tab => tab.url === eventUrl).length === 16 && state.profiles.every(profile => state.tabs.filter(tab => tab.profileId === profile.id && tab.url === eventUrl && !tab.loading).length === 1));
     for (const profile of loaded.profiles) assert.equal(loaded.tabs.filter(tab => tab.profileId === profile.id && tab.url === eventUrl).length, 1, JSON.stringify({ profile, profiles: loaded.profiles, launch: loaded.launch, tabs: loaded.tabs.map(({ id, profileId, url, loading, error }) => ({ id, profileId, url, loading, error })) }));
+    await waitCheckout(reopened, state => state.tabs.filter(tab => tab.url === eventUrl).length === 16 && state.tabs.filter(tab => tab.url === eventUrl).every(tab => tab.queue === 'available'));
     assert.equal(restoredSite.url(), 'http://127.0.0.1:8080/checkout.html');
     assert.equal(await restoredSite.locator('input[placeholder="Nome Completo"]').inputValue(), 'Carrinho preservado');
     const cookies = await instance.evaluate(async ({ webContents }, { tabs, url }) => Promise.all(tabs.map(async tab => ({ profileId: tab.profileId, cookies: await webContents.fromId(tab.id).session.cookies.get({ url }) }))), { tabs: loaded.tabs.filter(tab => tab.url === eventUrl), url: eventUrl });
@@ -579,7 +589,7 @@ require(${JSON.stringify(path.join(root, 'desktop/app/main.cjs'))});`);
     await branded.locator('.sidebar [data-view=buy]').click();
     await branded.locator('#card-profile').selectOption({ label: 'Principal · final 1111' });
     assert.match(await branded.locator('#buy-balance').textContent(), /876,55/);
-    console.log('PASS: Electron real: sala de espera por título, liberação do mesmo evento, retorno à espera, erro e página desconhecida sem falsa liberação; perfil com janelas em estados diferentes e foco preservado; perfil Utilizado após preencher, tentativas vazias/falhas sem marca, horário persistido, janelas do perfil, limpeza independente de CPF e outros perfis; /orders/ inicia dez minutos sem contador, diminui, não renova ao recarregar e compartilha prazo por pedido/perfil; outro pedido tem prazo próprio; novidades com primeira referência sem alerta, novo post/story identificado, avisos locais, login sem apagar último sucesso, pausa, histórico após reiniciar e cookies Instagram separados da Meaple; consulta não interrompe o story aberto; abrir evento nos 16 perfis com cofre bloqueado, link validado, cookies isolados, seleção/carrinhos preservados, repetição sem duplicar e Enter sem preencher; leitura de evento, lotes, quantidade, valores e total; estoque apenas após pagamento registrado; rateio exato, preço de revenda e CSV sem cartão/CPF; edição de lote preserva limite; rascunhos isolados por janela e persistência criptografada após reiniciar; contador automático por janela com cofre bloqueado, atualização, urgência, expiração, ausência, navegação, exclusão de provedor externo, seleção e fechamento; layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores; PIN com zero à esquerda e migração da senha antiga sem perda de dados.');
+    console.log('PASS: Electron real: link /808/submundo-808-curitiba-pr Disponível sem botão, status nos perfis/seletores e link informado disponível nos 16 perfis; sala de espera por título, liberação do mesmo evento, retorno à espera, erro e página desconhecida sem falsa liberação; perfil com janelas em estados diferentes e foco preservado; perfil Utilizado após preencher, tentativas vazias/falhas sem marca, horário persistido, janelas do perfil, limpeza independente de CPF e outros perfis; /orders/ inicia dez minutos sem contador, diminui, não renova ao recarregar e compartilha prazo por pedido/perfil; outro pedido tem prazo próprio; novidades com primeira referência sem alerta, novo post/story identificado, avisos locais, login sem apagar último sucesso, pausa, histórico após reiniciar e cookies Instagram separados da Meaple; consulta não interrompe o story aberto; abrir evento nos 16 perfis com cofre bloqueado, link validado, cookies isolados, seleção/carrinhos preservados, repetição sem duplicar e Enter sem preencher; leitura de evento, lotes, quantidade, valores e total; estoque apenas após pagamento registrado; rateio exato, preço de revenda e CSV sem cartão/CPF; edição de lote preserva limite; rascunhos isolados por janela e persistência criptografada após reiniciar; contador automático por janela com cofre bloqueado, atualização, urgência, expiração, ausência, navegação, exclusão de provedor externo, seleção e fechamento; layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores; PIN com zero à esquerda e migração da senha antiga sem perda de dados.');
   } catch (error) {
     const panel = instance?.windows().find(page => page.url() === 'app://manager/popup.html');
     if (panel) { await panel.screenshot({ path: path.join(root, 'test-results/desktop-error.png'), fullPage: true }).catch(() => {}); console.error('UI:', await panel.locator('#message').textContent().catch(() => '')); }

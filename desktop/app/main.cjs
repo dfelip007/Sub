@@ -7,7 +7,7 @@ const { Store } = require('./store.cjs');
 const { Workspace, partition } = require('./workspace.cjs');
 const { canFill, canNavigate, validateValues, eventUrl } = require('./policy.cjs');
 const { readCartTimer, freshTimer, OrderTimers } = require('./cart-timer.cjs');
-const { readQueuePage, QueueStatus } = require('./queue-status.cjs');
+const { readQueuePage, QueueStatus, EventRoutes } = require('./queue-status.cjs');
 const { readTickets } = require('./ticket-reader.cjs');
 const { Instagram } = require('./instagram.cjs');
 const CONTROL_URL = 'app://manager/popup.html';
@@ -32,6 +32,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: t
 let controller;
 const windows = new Map();
 const orderTimers = new OrderTimers(smoke);
+const eventRoutes = new EventRoutes(smoke);
 const inFlight = new Set();
 let selectedTab = null;
 let workspace;
@@ -117,7 +118,7 @@ function configureSession(profileId) {
 }
 function registerWindow(window, profileId) {
   const id = window.webContents.id;
-  const entry = { window, profileId, error: '', navigationUrl: '', timer: null, timerReadAt: 0, generation: 0, reading: false, queue: new QueueStatus(smoke), queueReadAt: 0 };
+  const entry = { window, profileId, error: '', navigationUrl: '', timer: null, timerReadAt: 0, generation: 0, reading: false, queue: new QueueStatus(smoke, eventRoutes), queueReadAt: 0 };
   windows.set(id, entry);
   window.webContents.on('did-start-navigation', (_event, url, _inPlace, mainFrame) => { if (mainFrame) { entry.navigationUrl = url; resetTimer(entry); notify(); } });
   window.webContents.on('dom-ready', () => { void readTimer(entry); });
@@ -176,6 +177,7 @@ function openCheckout(profileId = browsing.selected, newWindow = false) {
 async function openAllProfiles(value) {
   if (launch.running) throw new Error('Aguarde a abertura dos perfis terminar.');
   const url = eventUrl(value, smoke);
+  eventRoutes.remember(url);
   const profiles = [...browsing.profiles];
   launch = { running: true, total: profiles.length, processed: 0, created: 0, reused: 0, failed: [], failureDetails: [] };
   notify();

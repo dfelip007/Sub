@@ -158,7 +158,7 @@
   }
   function urgency(timer) { return !timer ? 'unknown' : timer.seconds === 0 ? 'expired' : timer.seconds <= 120 ? 'urgent' : 'normal'; }
   function queueLabel(status) {
-    return ({ waiting: 'Na sala de espera', released: 'Liberado para o evento', event: 'Página do evento', checkout: 'No checkout', loading: 'Carregando página…', error: 'Falha ao consultar a página', outside: 'Fora da Meaple' })[status] || 'Status não identificado';
+    return ({ available: 'Disponível', waiting: 'Na sala de espera', released: 'Liberado para o evento', event: 'Página do evento', checkout: 'No checkout', loading: 'Carregando página…', error: 'Falha ao consultar a página', outside: 'Fora da Meaple' })[status] || 'Status não identificado';
   }
   function profileQueue(profileId) {
     const tabs = state.tabs.filter(tab => tab.profileId === profileId);
@@ -166,8 +166,8 @@
     if (tabs.length === 1) return { status: tabs[0].queue || 'unknown', text: queueLabel(tabs[0].queue) };
     const groups = new Map();
     for (const tab of tabs) groups.set(tab.queue || 'unknown', (groups.get(tab.queue || 'unknown') || 0) + 1);
-    const names = { waiting: 'na sala de espera', released: 'com acesso ao evento', event: 'na página do evento', checkout: 'no checkout', loading: 'carregando', error: 'com falha de leitura', outside: 'fora da Meaple', unknown: 'sem status identificado' };
-    return { status: groups.size === 1 ? [...groups.keys()][0] : 'mixed', text: [...groups].map(([status, count]) => `${count} ${status === 'released' ? count === 1 ? 'liberada para o evento' : 'liberadas para o evento' : names[status] || names.unknown}`).join(' · ') };
+    const names = { available: 'disponível', waiting: 'na sala de espera', released: 'com acesso ao evento', event: 'na página do evento', checkout: 'no checkout', loading: 'carregando', error: 'com falha de leitura', outside: 'fora da Meaple', unknown: 'sem status identificado' };
+    return { status: groups.size === 1 ? [...groups.keys()][0] : 'mixed', text: [...groups].map(([status, count]) => `${count} ${status === 'available' ? count === 1 ? 'disponível' : 'disponíveis' : status === 'released' ? count === 1 ? 'liberada para o evento' : 'liberadas para o evento' : names[status] || names.unknown}`).join(' · ') };
   }
   function renderProfileQueues() {
     for (const row of document.querySelectorAll('[data-browser-profile]')) {

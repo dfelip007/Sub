@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { JSDOM } = require('../../node_modules/jsdom');
-const { readCartTimer, freshTimer } = require('../app/cart-timer.cjs');
+const { readCartTimer, freshTimer, OrderTimers } = require('../app/cart-timer.cjs');
 
 function read(html, route = '/checkout') {
   const dom = new JSDOM(html, { url: `https://meaple.com.br${route}` });
@@ -66,4 +66,52 @@ test('leituras com mais de cinco segundos ou erro deixam de ser exibidas', () =>
   assert.deepEqual(freshTimer(entry, 5999), entry.timer);
   assert.equal(freshTimer(entry, 6000), null);
   assert.equal(freshTimer({ ...entry, error: 'falha' }, 2000), null);
+});
+
+test('regra de dez minutos só inicia na rota orders da Meaple', () => {
+  const clocks = new OrderTimers();
+  for (const url of ['https://meaple.com.br/checkout', 'https://meaple.com.br/orders-old/1', 'https://meaple.com.br/event?next=/orders/', 'https://meaple.com.br.evil.invalid/orders/', 'https://provider.invalid/orders/', 'http://meaple.com.br/orders/', 'https://user:pass@meaple.com.br/orders/', 'https://meaple.com.br:444/orders/']) {
+    clocks.observe('a', url, 0); assert.equal(clocks.timer('a', url, 0), null, url);
+  }
+  clocks.observe('a', 'https://meaple.com.br/orders/', 0);
+  assert.equal(clocks.timer('a', 'https://meaple.com.br/orders/', 0).seconds, 600);
+  assert.equal(clocks.timer('a', 'https://meaple.com.br/orders/', 1001).seconds, 599);
+  assert.equal(read('<p>Tempo restante: 02:30</p>', '/orders/pedido-1').seconds, 150);
+});
+
+test('recarregar, alterar query/hash e revisitar o mesmo pedido não renovam o prazo', () => {
+  const clocks = new OrderTimers(), url = 'https://meaple.com.br/orders/pedido-1/';
+  clocks.observe('a', url, 1000);
+  clocks.observe('a', url, 120000);
+  clocks.observe('a', `${url}?step=payment#card`, 240000);
+  clocks.observe('a', `${url}payment`, 245000);
+  assert.equal(clocks.timer('a', `${url}payment`, 245000).deadlineAt, 601000);
+  clocks.observe('a', 'https://meaple.com.br/evento', 250000);
+  assert.equal(clocks.timer('a', 'https://meaple.com.br/evento', 250000), null);
+  clocks.observe('a', url.replace(/\/$/, ''), 300000);
+  assert.deepEqual(clocks.timer('a', url, 301000), { status: 'running', seconds: 300, source: 'orders', deadlineAt: 601000 });
+  assert.equal(clocks.timer('a', url, 601000).seconds, 0);
+  clocks.observe('a', url, 700000);
+  assert.equal(clocks.timer('a', url, 700000).status, 'expired');
+});
+
+test('perfis e pedidos diferentes têm prazos independentes; janelas do mesmo pedido compartilham o prazo', () => {
+  const clocks = new OrderTimers(), first = 'https://meaple.com.br/orders/1', second = 'https://meaple.com.br/orders/2';
+  clocks.observe('a', first, 0); clocks.observe('b', first, 60000); clocks.observe('a', second, 120000);
+  clocks.observe('a', first, 180000);
+  assert.equal(clocks.timer('a', first, 180000).seconds, 420);
+  assert.equal(clocks.timer('b', first, 180000).seconds, 480);
+  assert.equal(clocks.timer('a', second, 180000).seconds, 540);
+});
+
+test('leitura real menor limita a contagem local sem renovar nem recuperar prazo expirado', () => {
+  const clocks = new OrderTimers(), url = 'https://meaple.com.br/orders/1';
+  clocks.observe('a', url, 0);
+  clocks.limit('a', url, 60, 100000);
+  clocks.limit('a', url, 600, 110000);
+  assert.equal(clocks.timer('a', url, 130000).seconds, 30);
+  clocks.limit('a', url, 0, 131000);
+  assert.equal(clocks.timer('a', url, 131000).status, 'expired');
+  clocks.limit('a', url, 600, 132000);
+  assert.equal(clocks.timer('a', url, 132000).seconds, 0);
 });

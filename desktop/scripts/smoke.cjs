@@ -21,6 +21,7 @@ const root = path.resolve(__dirname, '../..');
       response.end(data.login ? '<h1>Entrar no Instagram fictício</h1><input type="password">' : `<main><header><h2>${username}</h2></header><article>${data.posts.map(id => `<a href="https://www.instagram.com/p/${id}/">Publicação fictícia ${id}</a>`).join('')}</article><a href="https://www.instagram.com/stories/${username}/">Stories</a>${data.story ? `<a href="https://www.instagram.com/stories/${username}/${data.story}/">Story específico</a>` : ''}</main>`); return;
     }
     if (/^\/(stories|p|reel)\//.test(pathname)) { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end('<h1>Instagram fictício — conteúdo</h1>'); return; }
+    if (/^\/orders(?:\/|$)/.test(pathname)) { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end('<h1>Dados do Comprador</h1><p>Checkout fictício sem contador visível.</p>'); return; }
     response.setHeader('Content-Type', request.url === '/demo.js' ? 'application/javascript' : 'text/html; charset=utf-8');
     response.end(request.url === '/demo.js' ? demoScript : fixture);
   });
@@ -282,6 +283,28 @@ const root = path.resolve(__dirname, '../..');
     await panel.waitForFunction(() => document.querySelector('#cart-time').textContent === '00:00' && document.querySelector('#cart-clock').dataset.urgency === 'expired');
     await second.evaluate(() => { document.querySelector('#cart-deadline').hidden = true; history.pushState({}, '', '/checkout/sem-contador'); });
     await panel.waitForFunction(() => document.querySelector('#cart-time').textContent === '—' && document.querySelector('#cart-time-state').textContent === 'Tempo não identificado');
+    // The explicit /orders/ rule works without any DOM countdown, with one
+    // absolute deadline across reloads, SPA steps and windows of the same order.
+    await second.goto('http://127.0.0.1:8080/orders/cart-a/');
+    const orderState = await waitCheckout(panel, state => state.tab?.timer?.source === 'orders');
+    const deadlineAt = orderState.tab.timer.deadlineAt;
+    assert.ok(orderState.tab.timer.seconds >= 595 && orderState.tab.timer.seconds <= 600);
+    await panel.waitForFunction(() => document.querySelector('#cart-time-help').textContent.includes('Contagem local'));
+    const decreased = await waitCheckout(panel, state => state.tab?.timer?.seconds < orderState.tab.timer.seconds);
+    assert.equal(decreased.tab.timer.deadlineAt, deadlineAt);
+    await second.reload();
+    const reloaded = await waitCheckout(panel, state => !state.tab.loading && state.tab.timer?.source === 'orders');
+    assert.equal(reloaded.tab.timer.deadlineAt, deadlineAt, 'Recarregar não reinicia os dez minutos.');
+    await third.evaluate(() => { document.querySelector('#cart-deadline').hidden = true; history.pushState({}, '', '/orders/cart-a/payment?step=2#card'); });
+    const shared = await waitCheckout(panel, state => state.tabs.find(tab => tab.id === thirdId)?.timer?.source === 'orders');
+    assert.equal(shared.tabs.find(tab => tab.id === thirdId).timer.deadlineAt, deadlineAt, 'Duas janelas do mesmo pedido/perfil compartilham o prazo.');
+    await panel.screenshot({ path: path.join(root, 'test-results/desktop-orders.png'), fullPage: true });
+    await second.evaluate(() => history.pushState({}, '', '/orders/cart-b/'));
+    const nextOrder = await waitCheckout(panel, state => state.tab?.url.endsWith('/orders/cart-b/') && state.tab.timer?.source === 'orders');
+    assert.ok(nextOrder.tab.timer.deadlineAt > deadlineAt, 'Outro pedido tem seu próprio prazo.');
+    assert.equal(nextOrder.tabs.find(tab => tab.id === thirdId).timer.deadlineAt, deadlineAt);
+    await third.evaluate(() => { document.querySelector('#cart-deadline').hidden = false; history.pushState({}, '', '/checkout.html'); });
+    await waitCheckout(panel, state => state.tabs.find(tab => tab.id === thirdId)?.timer?.seconds === 225);
     // An HTTPS payment-provider window must not be inspected, even if its text looks identical.
     await second.route('https://provider.example.invalid/**', route => route.fulfill({ contentType: 'text/html', body: '<p>Seu carrinho expira em 10:00</p>' }));
     await second.goto('https://provider.example.invalid/payment');
@@ -496,7 +519,7 @@ require(${JSON.stringify(path.join(root, 'desktop/app/main.cjs'))});`);
     await branded.locator('.sidebar [data-view=buy]').click();
     await branded.locator('#card-profile').selectOption({ label: 'Principal · final 1111' });
     assert.match(await branded.locator('#buy-balance').textContent(), /876,55/);
-    console.log('PASS: Electron real: novidades com primeira referência sem alerta, novo post/story identificado, avisos locais, login sem apagar último sucesso, pausa, histórico após reiniciar e cookies Instagram separados da Meaple; consulta não interrompe o story aberto; abrir evento nos 16 perfis com cofre bloqueado, link validado, cookies isolados, seleção/carrinhos preservados, repetição sem duplicar e Enter sem preencher; leitura de evento, lotes, quantidade, valores e total; estoque apenas após pagamento registrado; rateio exato, preço de revenda e CSV sem cartão/CPF; edição de lote preserva limite; rascunhos isolados por janela e persistência criptografada após reiniciar; contador automático por janela com cofre bloqueado, atualização, urgência, expiração, ausência, navegação, exclusão de provedor externo, seleção e fechamento; layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores; PIN com zero à esquerda e migração da senha antiga sem perda de dados.');
+    console.log('PASS: Electron real: /orders/ inicia dez minutos sem contador, diminui, não renova ao recarregar e compartilha prazo por pedido/perfil; outro pedido tem prazo próprio; novidades com primeira referência sem alerta, novo post/story identificado, avisos locais, login sem apagar último sucesso, pausa, histórico após reiniciar e cookies Instagram separados da Meaple; consulta não interrompe o story aberto; abrir evento nos 16 perfis com cofre bloqueado, link validado, cookies isolados, seleção/carrinhos preservados, repetição sem duplicar e Enter sem preencher; leitura de evento, lotes, quantidade, valores e total; estoque apenas após pagamento registrado; rateio exato, preço de revenda e CSV sem cartão/CPF; edição de lote preserva limite; rascunhos isolados por janela e persistência criptografada após reiniciar; contador automático por janela com cofre bloqueado, atualização, urgência, expiração, ausência, navegação, exclusão de provedor externo, seleção e fechamento; layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores; PIN com zero à esquerda e migração da senha antiga sem perda de dados.');
   } catch (error) {
     const panel = instance?.windows().find(page => page.url() === 'app://manager/popup.html');
     if (panel) { await panel.screenshot({ path: path.join(root, 'test-results/desktop-error.png'), fullPage: true }).catch(() => {}); console.error('UI:', await panel.locator('#message').textContent().catch(() => '')); }

@@ -6,7 +6,7 @@ const path = require('node:path');
 const { Store } = require('./store.cjs');
 const { Workspace, partition } = require('./workspace.cjs');
 const { canFill, canNavigate, validateValues, eventUrl } = require('./policy.cjs');
-const { readCartTimer, freshTimer } = require('./cart-timer.cjs');
+const { readCartTimer, freshTimer, OrderTimers } = require('./cart-timer.cjs');
 const { readTickets } = require('./ticket-reader.cjs');
 const { Instagram } = require('./instagram.cjs');
 const CONTROL_URL = 'app://manager/popup.html';
@@ -30,6 +30,7 @@ if (smoke) {
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
 let controller;
 const windows = new Map();
+const orderTimers = new OrderTimers(smoke);
 const inFlight = new Set();
 let selectedTab = null;
 let workspace;
@@ -49,7 +50,7 @@ function activeWindow() {
 }
 function state() {
   const selected = activeWindow();
-  const tabs = [...windows.values()].map(entry => ({ id: entry.window.webContents.id, profileId: entry.profileId, revision: entry.generation, url: entry.window.webContents.getURL() || HOME, loading: entry.window.webContents.isLoading(), error: entry.error, timer: freshTimer(entry) }));
+  const tabs = [...windows.values()].map(entry => ({ id: entry.window.webContents.id, profileId: entry.profileId, revision: entry.generation, url: entry.window.webContents.getURL() || HOME, loading: entry.window.webContents.isLoading(), error: entry.error, timer: cartTimer(entry) }));
   const tab = tabs.find(item => item.id === selected?.window.webContents.id) || null;
   return { profiles: browsing.profiles, profileId: browsing.selected, tabs, tab, loading: tab?.loading || false, error: tab?.error || '', launch };
 }
@@ -67,6 +68,11 @@ function current(tabId) {
 const locationGuard = `if (!(${canFill.toString()})(location.href, ${smoke})) throw new Error('Página não permitida para preenchimento.');`;
 const timerCode = `(() => { if (!(${canFill.toString()})(location.href, ${smoke})) return null; return (${readCartTimer.toString()})(document); })()`;
 function resetTimer(entry) { entry.generation++; entry.timer = null; entry.timerReadAt = 0; }
+function cartTimer(entry) {
+  const contents = entry.window.webContents, url = contents.getURL();
+  if (contents.isLoadingMainFrame() && entry.navigationUrl !== url) return null;
+  return freshTimer(entry) || orderTimers.timer(entry.profileId, url);
+}
 async function readTimer(entry) {
   if (entry.reading || entry.window.isDestroyed()) return;
   const contents = entry.window.webContents;
@@ -77,6 +83,7 @@ async function readTimer(entry) {
   }
   const generation = entry.generation;
   const startedAt = Date.now();
+  orderTimers.observe(entry.profileId, contents.getURL(), startedAt);
   const previous = JSON.stringify(freshTimer(entry));
   entry.reading = true;
   try {
@@ -84,6 +91,7 @@ async function readTimer(entry) {
     if (entry.window.isDestroyed() || entry.generation !== generation) return;
     entry.timer = result && Number.isInteger(result.seconds) && result.seconds >= 0 && ['running', 'expired'].includes(result.status) ? result : null;
     entry.timerReadAt = startedAt;
+    if (entry.timer) orderTimers.limit(entry.profileId, contents.getURL(), entry.timer.seconds, startedAt);
   } catch {
     if (entry.generation === generation) { entry.timer = null; entry.timerReadAt = 0; }
   } finally {
@@ -102,6 +110,8 @@ function registerWindow(window, profileId) {
   windows.set(id, entry);
   window.webContents.on('did-start-navigation', (_event, url, _inPlace, mainFrame) => { if (mainFrame) { entry.navigationUrl = url; resetTimer(entry); notify(); } });
   window.webContents.on('dom-ready', () => { void readTimer(entry); });
+  window.webContents.on('did-navigate', (_event, url) => { orderTimers.observe(profileId, url); });
+  window.webContents.on('did-navigate-in-page', (_event, url, mainFrame) => { if (mainFrame) orderTimers.observe(profileId, url); });
   configureSession(profileId);
   window.webContents.on('will-navigate', (event, url) => { if (!canNavigate(url, smoke)) event.preventDefault(); });
   window.webContents.on('will-redirect', (event, url) => { if (!canNavigate(url, smoke)) event.preventDefault(); });
@@ -288,13 +298,14 @@ async function start() {
     { label: 'Editar', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] }
   ]));
   await controller.loadURL(CONTROL_URL);
-  // Poll every open profile, including background windows. Only values actually
-  // read from the site are shown; no local timer extends or renews a cart.
+  // Site readings take priority; /orders/ also has the user's ten-minute local
+  // deadline. Notify every second so local clocks advance without a DOM timer.
   timerPoll = setInterval(() => {
     for (const entry of windows.values()) {
-      if (entry.timer && !freshTimer(entry)) { entry.timer = null; notify(); }
+      if (entry.timer && !freshTimer(entry)) entry.timer = null;
       void readTimer(entry);
     }
+    if (windows.size) notify();
   }, 1000);
   timerPoll.unref();
   openCheckout();

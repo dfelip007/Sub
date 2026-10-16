@@ -1,7 +1,7 @@
 {
   "name": "meaple-checkout-desktop",
   "productName": "Submundo Compras",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "description": "Submundo Compras: perfis locais, cofre e controle de limite para compras na Meaple.",
   "author": "dfelip007",

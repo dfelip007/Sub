@@ -1,4 +1,5 @@
 'use strict';
+const { canFill } = require('./policy.cjs');
 
 // Serialized into the isolated checkout world. Read visible text only; never
 // infer a reservation length or read inputs, cookies, storage, or payment data.
@@ -44,7 +45,7 @@ function readCartTimer(document) {
   }
   // A checkout route or buyer/payment headings disambiguate a generic "tempo
   // restante". Event/lote countdowns must never become cart deadlines.
-  const checkout = /\/(?:checkout|carrinho|cart|pagamento)(?:[/?#.]|$)/i.test(document.location.pathname)
+  const checkout = /\/(?:checkout|carrinho|cart|pagamento|orders)(?:[/?#.]|$)/i.test(document.location.pathname)
     || [...document.querySelectorAll('h1,h2,h3')].some(element => visible(element) && /dados do comprador|metodo de pagamento/.test(normalize(element.textContent)));
   const values = new Set();
   for (const element of document.querySelectorAll('p,span,div,section,aside,header,footer,strong,b,time,[role="timer"],[role="alert"],[role="status"]')) {
@@ -80,4 +81,34 @@ function freshTimer(entry, now = Date.now()) {
   return entry.timer && now - entry.timerReadAt < 5000 && !entry.error ? entry.timer : null;
 }
 
-module.exports = { readCartTimer, freshTimer };
+// The user supplied the ten-minute rule for /orders/. Keep one absolute
+// deadline per profile/order during this app session, shared by its windows.
+// Reloads, query/hash changes and returning to an old order cannot renew it.
+class OrderTimers {
+  constructor(smoke = false) { this.smoke = smoke; this.deadlines = new Map(); }
+  key(profileId, value) {
+    if (!canFill(value, this.smoke)) return null;
+    const url = new URL(value);
+    const route = url.pathname.match(/^\/orders(?:\/([^/]+))?(?:\/|$)/);
+    if (url.username || url.password || url.port && url.protocol === 'https:' || !route) return null;
+    return JSON.stringify([profileId, url.origin, route[1] || '']);
+  }
+  observe(profileId, url, now = Date.now()) {
+    const key = this.key(profileId, url);
+    if (key && !this.deadlines.has(key)) this.deadlines.set(key, now + 600000);
+  }
+  limit(profileId, url, seconds, now = Date.now()) {
+    const key = this.key(profileId, url);
+    if (key && this.deadlines.has(key) && Number.isInteger(seconds) && seconds >= 0) {
+      this.deadlines.set(key, Math.min(this.deadlines.get(key), now + seconds * 1000));
+    }
+  }
+  timer(profileId, url, now = Date.now()) {
+    const deadlineAt = this.deadlines.get(this.key(profileId, url));
+    if (deadlineAt == null) return null;
+    const seconds = Math.max(0, Math.min(600, Math.ceil((deadlineAt - now) / 1000)));
+    return { status: seconds === 0 ? 'expired' : 'running', seconds, source: 'orders', deadlineAt };
+  }
+}
+
+module.exports = { readCartTimer, freshTimer, OrderTimers };

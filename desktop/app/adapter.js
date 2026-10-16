@@ -162,7 +162,7 @@
     $('cart-clock').dataset.urgency = urgency(timer);
     $('cart-time').textContent = clockText(timer);
     $('cart-time-state').textContent = !tab ? 'Aguardando checkout' : !timer ? tab.loading ? 'Consultando o site…' : 'Tempo não identificado' : timer.seconds === 0 ? 'Contador esgotado' : timer.seconds <= 120 ? 'Atenção: 2 minutos ou menos' : 'Tempo restante para finalizar';
-    $('cart-time-help').textContent = !tab ? 'Abra a Meaple neste perfil e avance ao checkout.' : !timer ? 'Confira o prazo na Meaple. O contador aparecerá aqui quando puder ser identificado.' : timer.seconds === 0 ? 'Confira na Meaple se o carrinho expirou antes de prosseguir.' : 'Espelha o contador da Meaple nesta janela. O prazo não é prolongado pelo programa.';
+    $('cart-time-help').textContent = !tab ? 'Abra a Meaple neste perfil e avance ao checkout.' : !timer ? 'Ao entrar em /orders/, inicia a contagem local de 10 minutos. Se disponível, o contador do site tem prioridade.' : timer.source === 'orders' ? 'Contagem local: 10 minutos desde a primeira entrada neste pedido nesta sessão do programa. Recarregar não reinicia o prazo. Confira a validade na Meaple.' : timer.seconds === 0 ? 'Confira na Meaple se o carrinho expirou antes de prosseguir.' : 'Espelha o contador da Meaple nesta janela. O prazo não é prolongado pelo programa.';
     $('cart-overview').hidden = !state.tabs.length;
     $('cart-overview-title').textContent = `Visão geral · ${state.tabs.length} ${state.tabs.length === 1 ? 'janela aberta' : 'janelas abertas'}`;
     const list = $('cart-list');
@@ -182,7 +182,7 @@
       const row = list.querySelector(`[data-tab="${item.id}"]`);
       row.dataset.urgency = urgency(item.timer);
       row.querySelector('.cart-row-time').textContent = clockText(item.timer);
-      row.querySelector('.cart-caption').textContent = item.timer ? item.timer.seconds === 0 ? 'Contador esgotado' : item.timer.seconds <= 120 ? '2 minutos ou menos' : 'Contador da Meaple' : item.loading ? 'Carregando…' : 'Tempo não identificado';
+      row.querySelector('.cart-caption').textContent = item.timer ? `${item.timer.source === 'orders' ? 'Contagem local · ' : ''}${item.timer.seconds === 0 ? 'Contador esgotado' : item.timer.seconds <= 120 ? '2 minutos ou menos' : item.timer.source === 'orders' ? '10 min por pedido' : 'Contador da Meaple'}` : item.loading ? 'Carregando…' : 'Tempo não identificado';
       const control = row.querySelector('button');
       control.textContent = item.id === tab?.id ? 'Selecionada' : 'Selecionar';
       control.setAttribute('aria-pressed', String(item.id === tab?.id));

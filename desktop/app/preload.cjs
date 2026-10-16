@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('desktopBridge', {
   createBrowser: (label, count) => ipcRenderer.invoke('browsers:create', label, count),
   selectBrowser: id => ipcRenderer.invoke('browsers:select', id),
   renameBrowser: (id, label) => ipcRenderer.invoke('browsers:rename', id, label),
+  clearBrowserUse: (id, expected) => ipcRenderer.invoke('browsers:clear-use', id, expected),
   removeBrowser: id => ipcRenderer.invoke('browsers:remove', id),
   selectTab: id => ipcRenderer.invoke('checkout:select', id),
   usage: cpfs => ipcRenderer.invoke('usage:status', cpfs),

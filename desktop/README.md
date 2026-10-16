@@ -6,7 +6,7 @@ A marca e a logo Submundo / 808 aparecem no painel e nos ícones do Windows. A i
 
 ## Usar e atualizar
 
-1. Feche a versão anterior e execute `Submundo-Compras-0.8.1-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados e o PIN das versões 0.4/0.5/0.6/0.7 permanecem no mesmo diretório. Para cofres das versões 0.1/0.2/0.3, use a senha existente uma vez, sem apagar o cofre, e depois defina seu PIN de 4 números em **Contato e ajustes → PIN do cofre**. Os cartões antigos começam sem limite informado e sem CVV salvo.
+1. Feche a versão anterior e execute `Submundo-Compras-0.8.2-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados e o PIN das versões 0.4/0.5/0.6/0.7 permanecem no mesmo diretório. Para cofres das versões 0.1/0.2/0.3, use a senha existente uma vez, sem apagar o cofre, e depois defina seu PIN de 4 números em **Contato e ajustes → PIN do cofre**. Os cartões antigos começam sem limite informado e sem CVV salvo.
 2. Desbloqueie o cofre com o PIN ou crie um PIN de exatamente 4 números no primeiro uso. Em **Contato e ajustes**, salve e-mail e telefone.
 3. Em **Compradores**, use **Novo comprador** para cadastrar nome, CPF e nascimento. Em **Cartões**, use **Novo cartão** para cadastrar número, titular, validade, endereço e limite disponível. A gravação de CVV é opcional por cartão: informe o código e marque **Salvar o CVV no cofre deste cartão**.
 4. Em **Perfis de navegação**, informe um prefixo e a quantidade (por exemplo, 15) e clique em **Criar perfis**. Você pode manter até 100 perfis, criando até 50 por vez. **Usar este perfil** abre a Meaple na sessão escolhida. Faça login, escolha ingressos e avance ao checkout.
@@ -41,6 +41,14 @@ Para cada perfil, o programa reaproveita uma janela que já esteja exatamente no
 A navegação começa imediatamente em pequenos grupos, com progresso no painel; a abertura de outros perfis não espera a conexão de cada site terminar. Ao concluir, o painel informa quantas janelas foram criadas/reaproveitadas e eventuais falhas ao criar janelas. O carregamento do site continua independentemente em cada sessão; aguarde-o antes de comprar. A abertura em lote aceita links HTTPS da Meaple/subdomínios, sem usuário/senha embutidos. A navegação de pagamento existente continua permitindo provedores HTTPS.
 
 O fluxo foi testado em Electron real com 16 perfis, sessões isoladas, cofre bloqueado, link inválido recusado, repetição sem duplicar, Enter no campo de link, carrinhos preservados e criação de uma nova janela para um perfil que já avançou no evento. O teste usa páginas locais fictícias; o carregamento do evento real depende da conexão e do acesso à Meaple.
+
+## Perfil de navegação utilizado
+
+Depois que o preenchimento automático confirmar ao menos um campo de dados, o **perfil de navegação de destino** recebe **Utilizado**, com data e hora de Brasília. Preenchimentos parciais também contam: confira as pendências exibidas. Apenas selecionar/abrir um perfil, uma tentativa que falhou ou somente recusar seguro não criam essa marca. Ela não confirma pagamento, não desconta limite e não bloqueia novo preenchimento.
+
+A marca aparece na **Visão geral** em todas as janelas daquele perfil, na lista de **Perfis de navegação** e no seletor de perfil da tela Comprar. O horário é atualizado ao preencher novamente. Fica salvo localmente após fechar o aplicativo, em `workspace.json`, sem guardar comprador, CPF ou cartão nessa marca. Funciona com o cofre bloqueado e é independente da utilização do CPF: limpar uma não limpa a outra. Cadastros antigos continuam compatíveis; a marca é criada nos próximos preenchimentos, sem deduzir uso pelo histórico de CPF.
+
+Em **Perfis de navegação → Limpar marcação**, você pode remover o aviso daquele perfil após confirmar. Os demais perfis, os CPFs e o histórico financeiro são preservados. Uma solicitação antiga não apaga uma utilização mais recente; não é possível limpar durante preenchimento do perfil. Se salvar a marca falhar após preencher, o programa avisa que os dados foram preenchidos e a marca não pôde ser salva.
 
 ## Tempo restante do carrinho
 

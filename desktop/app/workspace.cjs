@@ -18,6 +18,7 @@ class Workspace {
       const ids = new Set();
       for (const profile of data.profiles) {
         if (!/^(legacy|[a-f0-9-]{36})$/.test(profile.id) || ids.has(profile.id) || typeof profile.label !== 'string' || !profile.label.trim() || profile.label.length > 80) throw new Error('schema');
+        if (profile.lastFilledAt !== undefined && (!Number.isSafeInteger(profile.lastFilledAt) || profile.lastFilledAt <= 0)) throw new Error('schema');
         ids.add(profile.id);
       }
       for (const [key, entry] of Object.entries(data.usage)) {
@@ -63,6 +64,21 @@ class Workspace {
     });
   }
   select(id) { return this.transaction(data => { this.profile(data, id); data.selected = id; return this.snapshot(data); }); }
+  markProfileFilled(id) {
+    return this.transaction(data => {
+      const profile = this.profile(data, id);
+      profile.lastFilledAt = Math.max(Date.now(), (profile.lastFilledAt || 0) + 1);
+      return this.snapshot(data);
+    });
+  }
+  clearProfileUse(id, expected) {
+    return this.transaction(data => {
+      const profile = this.profile(data, id);
+      if (!Number.isSafeInteger(expected) || profile.lastFilledAt !== expected) throw new Error('A utilização do perfil mudou. Confira novamente antes de limpar a marcação.');
+      delete profile.lastFilledAt;
+      return this.snapshot(data);
+    });
+  }
   rename(id, label) {
     if (typeof label !== 'string' || !label.trim() || label.trim().length > 80) return Promise.reject(new Error('Informe um nome de até 80 caracteres.'));
     return this.transaction(data => { this.profile(data, id).label = label.trim(); return this.snapshot(data); });

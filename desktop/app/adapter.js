@@ -174,6 +174,7 @@
         const label = state.profiles.find(profile => profile.id === item.profileId)?.label || 'Perfil';
         const index = state.tabs.filter(other => other.profileId === item.profileId).findIndex(other => other.id === item.id) + 1;
         const main = node('div', '', 'record-main'); main.append(node('strong', `${label} · Janela ${index}`), node('p', '', 'cart-caption'));
+        main.append(node('span', '', 'tag used profile-used'));
         const time = node('strong', '', 'cart-row-time'); time.setAttribute('role', 'timer'); time.setAttribute('aria-live', 'off');
         row.append(main, time, button('Selecionar', 'cartTab', item.id)); list.append(row);
       }
@@ -182,6 +183,9 @@
       const row = list.querySelector(`[data-tab="${item.id}"]`);
       row.dataset.urgency = urgency(item.timer);
       row.querySelector('.cart-row-time').textContent = clockText(item.timer);
+      const used = row.querySelector('.profile-used'), profile = state.profiles.find(profile => profile.id === item.profileId);
+      used.hidden = !profile?.lastFilledAt;
+      used.textContent = profile?.lastFilledAt ? `Utilizado · ${dateTime(profile.lastFilledAt)}` : '';
       row.querySelector('.cart-caption').textContent = item.timer ? `${item.timer.source === 'orders' ? 'Contagem local · ' : ''}${item.timer.seconds === 0 ? 'Contador esgotado' : item.timer.seconds <= 120 ? '2 minutos ou menos' : item.timer.source === 'orders' ? '10 min por pedido' : 'Contador da Meaple'}` : item.loading ? 'Carregando…' : 'Tempo não identificado';
       const control = row.querySelector('button');
       control.textContent = item.id === tab?.id ? 'Selecionada' : 'Selecionar';
@@ -190,11 +194,12 @@
   }
   function renderBrowser() {
     if (!state) return;
-    options($('desktop-profile'), state.profiles.map(item => [item.label, item.id]), state.profileId);
+    options($('desktop-profile'), state.profiles.map(item => [`${item.label}${item.lastFilledAt ? ' · Utilizado' : ''}`, item.id]), state.profileId);
     const tabs = state.tabs.filter(item => item.profileId === state.profileId);
     options($('desktop-target'), tabs.length ? tabs.map((item, index) => [`Janela ${index + 1} · ${new URL(item.url).hostname || 'abrindo…'}`, item.id]) : [['Abra a Meaple neste perfil', '']], state.tab?.id);
     $('desktop-count').textContent = `${state.profiles.length} salvos · ${state.tabs.length} janelas abertas`;
-    $('selected-browser-label').textContent = state.profiles.find(item => item.id === state.profileId)?.label || '';
+    const selectedProfile = state.profiles.find(item => item.id === state.profileId);
+    $('selected-browser-label').textContent = selectedProfile ? `${selectedProfile.label}${selectedProfile.lastFilledAt ? ' · Utilizado' : ''}` : '';
     $('desktop-state').textContent = state.error || (state.loading ? 'Carregando a Meaple…' : state.tab ? 'Somente a janela selecionada acima receberá os dados.' : 'Clique em Abrir / ver Meaple para começar neste perfil.');
     renderTimers();
     syncTicketDraft();
@@ -209,8 +214,15 @@
     list.dataset.structure = signature; list.replaceChildren();
     for (const profile of state.profiles) {
       const row = node('div', '', 'record-row'); const main = node('div', '', 'record-main');
+      row.dataset.browserProfile = profile.id;
       main.append(node('strong', profile.label), node('p', `${state.tabs.filter(tab => tab.profileId === profile.id).length} janelas abertas${profile.id === state.profileId ? ' · Selecionado' : ''}`));
-      row.append(node('div', '▦', 'avatar'), main, button('Usar este perfil ↗', 'useProfile', profile.id)); list.append(row);
+      const actions = node('div', '', 'actions');
+      if (profile.lastFilledAt) {
+        main.append(node('span', `Utilizado · ${dateTime(profile.lastFilledAt)}`, 'tag used'));
+        const clear = button('Limpar marcação', 'clearProfileUse', profile.id, 'text-button'); clear.dataset.usedAt = profile.lastFilledAt; actions.append(clear);
+      }
+      actions.append(button('Usar este perfil ↗', 'useProfile', profile.id));
+      row.append(node('div', '▦', 'avatar'), main, actions); list.append(row);
     }
   }
   function renderProfiles() {
@@ -435,6 +447,10 @@
   document.addEventListener('click', event => {
     const control = event.target.closest('button'); if (!control || control.disabled) return;
     if (control.dataset.view) navigate(control.dataset.view);
+    if (control.dataset.clearProfileUse) {
+      if (!globalThis.confirm('Limpar a marca Utilizado deste perfil? A utilização dos CPFs e o histórico de compras serão mantidos.')) return;
+      void run(async () => { state = await bridge.clearBrowserUse(control.dataset.clearProfileUse, Number(control.dataset.usedAt)); }, 'Marcação do perfil removida.');
+    }
     if (control.dataset.newsOpen) void newsAction(() => bridge.openNews(control.dataset.newsOpen, control.dataset.newsKind, control.dataset.newsKey || ''), true);
     if (control.hasAttribute('data-open-all')) void run(async () => {
       state = await bridge.openAll($('event-link').value);
@@ -604,7 +620,8 @@
         const result = await bridge.fill(destination.tab.id, data);
         $('status').textContent = `${result.filled.length} itens preenchidos. ${result.pending.length ? 'Confira as pendências abaixo.' : 'Revise e finalize na Meaple.'}`;
         for (const item of result.pending) $('details').append(node('li', item));
-        message('Checkout preenchido. Após pagar na Meaple, use Registrar pagamento para atualizar o limite.');
+        if (result.profileUsageError) message(result.profileUsageError, 'error');
+        else message('Checkout preenchido. Após pagar na Meaple, use Registrar pagamento para atualizar o limite.');
       } catch {
         $('status').textContent = 'Não foi possível concluir o preenchimento. Abra o checkout da Meaple e tente novamente.'; $('status').dataset.kind = 'error';
         message('O registro ficou pendente no histórico. Confira o carrinho; nenhum valor foi descontado do limite.', 'error');

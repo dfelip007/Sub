@@ -66,3 +66,49 @@ test('gravações concorrentes não perdem marcas e arquivo danificado não é s
   await assert.rejects(workspace.markUsed('00000000000', selected), /preservado/);
   assert.equal(await fs.readFile(workspace.filename, 'utf8'), 'arquivo-danificado');
 }));
+
+test('marca o perfil preenchido e persiste horário sem marcar perfis apenas selecionados ou CPF manual', () => fixture(async (workspace, directory) => {
+  const initial = await workspace.init();
+  await workspace.markUsed('00000000000', initial.selected);
+  const other = await workspace.create('Outro');
+  assert.ok(other.profiles.every(profile => profile.lastFilledAt === undefined));
+  const used = await workspace.markProfileFilled(initial.selected);
+  const at = used.profiles.find(profile => profile.id === initial.selected).lastFilledAt;
+  assert.ok(Math.abs(at - Date.now()) < 5000);
+  assert.equal(used.selected, other.selected);
+  assert.equal(used.profiles.find(profile => profile.id === other.selected).lastFilledAt, undefined);
+  await workspace.rename(initial.selected, 'Perfil preenchido');
+  const restored = await new Workspace(directory).init();
+  assert.equal(restored.profiles.find(profile => profile.id === initial.selected).lastFilledAt, at);
+  const [cpf] = await workspace.statuses(['00000000000']);
+  await workspace.release('00000000000', cpf);
+  assert.equal((await workspace.init()).profiles.find(profile => profile.id === initial.selected).lastFilledAt, at);
+}));
+
+test('limpar marcação exige horário atual e não altera CPF nem os outros perfis', () => fixture(async workspace => {
+  const initial = await workspace.init(), other = await workspace.create('Outro');
+  await workspace.markUsed('00000000000', initial.selected);
+  const first = await workspace.markProfileFilled(initial.selected);
+  const at = first.profiles.find(profile => profile.id === initial.selected).lastFilledAt;
+  await workspace.markProfileFilled(other.selected);
+  const newer = await workspace.markProfileFilled(initial.selected);
+  const latest = newer.profiles.find(profile => profile.id === initial.selected).lastFilledAt;
+  assert.ok(latest > at);
+  await assert.rejects(workspace.clearProfileUse(initial.selected, at), /mudou/);
+  await assert.rejects(workspace.markProfileFilled('inexistente'), /não encontrado/);
+  const cleared = await workspace.clearProfileUse(initial.selected, latest);
+  assert.equal(cleared.profiles.find(profile => profile.id === initial.selected).lastFilledAt, undefined);
+  assert.ok(cleared.profiles.find(profile => profile.id === other.selected).lastFilledAt);
+  assert.equal((await workspace.statuses(['00000000000']))[0].status, 'used');
+}));
+
+test('recusa horário de perfil inválido sem apagar o arquivo nem inventar uma marcação', () => fixture(async workspace => {
+  await workspace.init();
+  const content = JSON.parse(await fs.readFile(workspace.filename, 'utf8'));
+  content.profiles[0].lastFilledAt = 'ontem';
+  const damaged = JSON.stringify(content);
+  await fs.writeFile(workspace.filename, damaged);
+  await assert.rejects(workspace.markProfileFilled(content.selected), /preservado/);
+  await assert.rejects(workspace.init(), /preservado/);
+  assert.equal(await fs.readFile(workspace.filename, 'utf8'), damaged);
+}));

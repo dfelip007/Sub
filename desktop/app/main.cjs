@@ -228,6 +228,10 @@ function handlers() {
   handle('browsers:create', async (label, count) => { browsing = await workspace.create(label, count); selectedTab = null; notify(); return state(); });
   handle('browsers:select', async id => { browsing = await workspace.select(id); selectedTab = null; notify(); return state(); });
   handle('browsers:rename', async (id, label) => { browsing = await workspace.rename(id, label); notify(); return state(); });
+  handle('browsers:clear-use', async (id, expected) => {
+    if ([...windows.values()].some(entry => entry.profileId === id && inFlight.has(entry.window.webContents.id))) throw new Error('Aguarde o preenchimento terminar antes de limpar a marcação.');
+    browsing = await workspace.clearProfileUse(id, expected); notify(); return state();
+  });
   handle('browsers:remove', async id => {
     if ([...windows.values()].some(entry => entry.profileId === id && inFlight.has(entry.window.webContents.id))) throw new Error('Aguarde o preenchimento terminar antes de excluir o perfil.');
     browsing = await workspace.remove(id);
@@ -265,7 +269,13 @@ function handlers() {
       const code = `(async () => { ${locationGuard} if (!globalThis.CheckoutAssist) throw new Error('O site mudou. Tente preencher novamente.'); return globalThis.CheckoutAssist.fillCheckout(${JSON.stringify(data)}); })()`;
       const result = await contents.executeJavaScriptInIsolatedWorld(WORLD, [{ code }]);
       if (!result || !Array.isArray(result.filled) || !Array.isArray(result.pending)) throw new Error('Resposta de preenchimento inválida.');
-      entry.window.show(); entry.window.focus();
+      // Mark the actual destination profile only after at least one data field
+      // was filled. A failed attempt or declining insurance alone is not use.
+      if (result.filled.some(field => field !== 'Seguro recusado')) {
+        try { browsing = await workspace.markProfileFilled(entry.profileId); notify(); }
+        catch { result.profileUsageError = 'Os dados foram preenchidos, mas não foi possível salvar a marca Utilizado do perfil. Confira o perfil antes de continuar.'; }
+      }
+      if (!entry.window.isDestroyed()) { entry.window.show(); entry.window.focus(); }
       return result;
     } finally {
       inFlight.delete(tabId);

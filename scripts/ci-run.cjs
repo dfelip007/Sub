@@ -1,0 +1,11 @@
+'use strict';
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const [command, ...args] = process.argv.slice(2);
+if (!command) throw new Error('Comando obrigatório.');
+const result = spawnSync(command, args, { shell: process.platform === 'win32', encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+const output = [result.stdout || '', result.stderr || '', result.error ? `${result.error.name}: ${result.error.message}` : ''].filter(Boolean).join('\n');
+process.stdout.write(output);
+const status = result.status ?? 1;
+if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n### ${command} ${args.join(' ')} — exit ${status}\n\n\`\`\`\`text\n${output.slice(-22000)}\n\`\`\`\`\n`);
+process.exitCode = status;

@@ -16,27 +16,27 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: |
             package-lock.json
             desktop/package-lock.json
-      - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: npm test
-      - run: npm ci --no-audit --no-fund
+      - run: node scripts/ci-run.cjs npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/ci-run.cjs npm test
+      - run: node ../scripts/ci-run.cjs npm ci --no-audit --no-fund
         working-directory: desktop
-      - run: npm test
+      - run: node ../scripts/ci-run.cjs npm test
         working-directory: desktop
-      - run: npm run prepare:app
+      - run: node ../scripts/ci-run.cjs npm run prepare:app
         working-directory: desktop
-      - run: npm run check
+      - run: node ../scripts/ci-run.cjs npm run check
         working-directory: desktop
-      - run: npm run test:app
+      - run: node ../scripts/ci-run.cjs npm run test:app
         working-directory: desktop
-      - run: npm run build:win
+      - run: node ../scripts/ci-run.cjs npm run build:win
         working-directory: desktop
       - name: Checksum do executável
         shell: pwsh

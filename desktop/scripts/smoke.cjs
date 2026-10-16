@@ -77,10 +77,89 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await site.locator('#result').textContent(), '');
     assert.equal(await site.evaluate(() => typeof globalThis.CheckoutAssist), 'undefined', 'Motor deve executar em mundo isolado.');
     assert.equal(await panel.locator('[name=cardCvv]').inputValue(), '');
+    await panel.waitForFunction(() => document.querySelector('#desktop-used').checked);
+    assert.match(await panel.locator('#desktop-usage-state').textContent(), /Utilizado pela última vez em:/);
+    const [firstUse] = await panel.evaluate(() => desktopBridge.usage(['00000000000']));
+    assert.equal(firstUse.status, 'used');
     const disk = await fs.readFile(path.join(directory, 'profiles/profiles.json'), 'utf8');
     for (const value of ['0000000000001111', 'Daniel de Teste', 'cardCvv', 'checkoutVaultSession']) assert.equal(disk.includes(value), false);
+    // Batch creation is usable for someone with 15+ browser profiles.
+    await site.evaluate(() => { localStorage.setItem('profile-test', 'first'); document.cookie = 'profile_test=first; path=/; max-age=3600'; });
+    await panel.locator('.desktop-toolbar details > summary').click();
+    await panel.locator('#desktop-label').fill('Compras');
+    await panel.locator('#desktop-quantity').fill('15');
+    await panel.locator('#desktop-create').click();
+    await panel.waitForFunction(() => document.querySelector('#desktop-profile').options.length === 16 && !document.querySelector('#desktop-open').disabled);
+    const selectedProfile = await panel.locator('#desktop-profile').inputValue();
+    assert.notEqual(selectedProfile, 'legacy');
+    await panel.locator('#desktop-open').click();
+    await panel.waitForFunction(() => document.querySelector('#desktop-target').value !== '');
+    const newTabId = (await panel.evaluate(() => desktopBridge.checkout())).tab.id;
+    const findWindow = async id => {
+      const deadline = Date.now() + 15000;
+      while (Date.now() < deadline) {
+        for (const page of instance.windows()) {
+          const handle = await instance.browserWindow(page);
+          if (await handle.evaluate(window => window.webContents.id) === id) {
+            await page.waitForURL('http://127.0.0.1:8080/**');
+            return page;
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 30));
+      }
+      throw new Error('Janela selecionada não encontrada.');
+    };
+    const second = await findWindow(newTabId);
+    await second.waitForLoadState();
+    assert.equal(await second.evaluate(() => localStorage.getItem('profile-test')), null);
+    assert.equal(await second.evaluate(() => document.cookie.includes('profile_test=first')), false);
+    await second.evaluate(() => { localStorage.setItem('profile-test', 'second'); document.cookie = 'profile_test=second; path=/; max-age=3600'; });
+    assert.equal(await site.evaluate(() => localStorage.getItem('profile-test')), 'first');
+    // Same-profile windows share login but only the explicitly selected window is filled.
+    await panel.locator('#desktop-new-window').click();
+    await panel.waitForFunction(() => document.querySelector('#desktop-target').options.length === 2);
+    const thirdId = (await panel.evaluate(() => desktopBridge.checkout())).tab.id;
+    const third = await findWindow(thirdId);
+    await third.waitForLoadState();
+    assert.equal(await third.evaluate(() => localStorage.getItem('profile-test')), 'second');
+    assert.ok(await third.evaluate(() => document.cookie.includes('profile_test=second')));
+    const cardId = await panel.locator('#card-profile').inputValue();
+    await panel.locator('#card-profile').selectOption('');
+    await panel.locator('#card-profile').selectOption(cardId);
+    await panel.locator('[name=cardCvv]').fill('000');
+    await panel.locator('#fill').click();
+    await third.waitForFunction(() => document.querySelector('input[placeholder="Nome Completo"]').value === 'Daniel de Teste');
+    await panel.waitForFunction(() => !document.querySelector('#fill').disabled && document.querySelector('[name=cardCvv]').value === '');
+    assert.equal(await second.locator('input[placeholder="Nome Completo"]').inputValue(), '');
+    assert.equal(await third.locator('#result').textContent(), '');
+    const [lastUse] = await panel.evaluate(() => desktopBridge.usage(['000.000.000-00']));
+    assert.ok(lastUse.at > firstUse.at, 'Reutilizar atualiza o horário sem bloquear, conforme solicitado.');
+    // Manual marking can correct history, and duplicate buyer records share the CPF marker.
+    panel.on('dialog', dialog => dialog.accept());
+    await panel.locator('#desktop-used').uncheck();
+    await panel.waitForFunction(() => document.querySelector('#desktop-usage-state').textContent.includes('ainda não'));
+    assert.deepEqual(await panel.evaluate(() => desktopBridge.usage(['00000000000'])), [{ status: 'available' }]);
+    await panel.locator('#desktop-used').check();
+    await panel.waitForFunction(() => document.querySelector('#desktop-usage-state').textContent.includes('Utilizado pela'));
+    await panel.locator('#buyer-editor > summary').click();
+    await panel.locator('#buyer-new').click();
+    await panel.locator('#buyer-label').fill('Daniel duplicado');
+    await panel.locator('[name=buyerName]').fill('Daniel de Teste');
+    await panel.locator('[name=cpf]').fill('000.000.000-00');
+    await panel.locator('[name=birthDate]').fill('01/02/1990');
+    await panel.locator('#buyer-save').click();
+    await panel.waitForFunction(() => document.querySelector('#buyer-profile').options.length === 3 && !document.querySelector('#buyer-save').disabled);
+    await panel.waitForFunction(() => [...document.querySelector('#buyer-profile').options].filter(option => option.textContent.includes('JÁ UTILIZADO')).length === 2);
+    await panel.locator('#buyer-editor > summary').click();
+    const operational = await fs.readFile(path.join(directory, 'profiles/workspace.json'), 'utf8');
+    for (const value of ['00000000000', '000.000.000-00', 'Daniel de Teste', '0000000000001111', 'cardCvv']) assert.equal(operational.includes(value), false);
+    // Leave a different destination selected and verify session/selection restoration.
+    await panel.locator('#desktop-target').selectOption(String(newTabId));
+    await panel.locator('#desktop-open').click();
+    assert.equal((await panel.evaluate(() => desktopBridge.checkout())).tab.id, newTabId, 'Abrir/ver mantém a janela escolhida.');
+    await panel.locator('.desktop-toolbar details > summary').click();
     await panel.screenshot({ path: path.join(root, 'test-results/desktop-panel.png'), fullPage: true });
-    await site.screenshot({ path: path.join(root, 'test-results/desktop-checkout.png'), fullPage: true });
+    await third.screenshot({ path: path.join(root, 'test-results/desktop-checkout.png'), fullPage: true });
     await instance.close();
     instance = await launch();
     const reopened = await getPanel(instance);
@@ -90,11 +169,18 @@ const root = path.resolve(__dirname, '../..');
     await reopened.locator('#vault-password').fill('senha-ficticia-teste');
     await reopened.locator('#vault-unlock').click();
     await reopened.waitForFunction(() => !document.querySelector('#buyer-profile').disabled);
-    await reopened.locator('#buyer-profile').selectOption({ label: 'Daniel' });
+    await reopened.waitForFunction(() => document.querySelector('#desktop-profile').options.length === 16);
+    assert.equal(await reopened.locator('#desktop-profile').inputValue(), selectedProfile);
+    await reopened.locator('#buyer-profile').selectOption({ label: 'Daniel · JÁ UTILIZADO' });
+    await reopened.waitForFunction(() => document.querySelector('#desktop-used').checked);
+    const restoredSite = instance.windows().find(page => page.url().startsWith('http://127.0.0.1:8080/'));
+    await restoredSite.waitForLoadState();
+    assert.equal(await restoredSite.evaluate(() => localStorage.getItem('profile-test')), 'second');
+    assert.ok(await restoredSite.evaluate(() => document.cookie.includes('profile_test=second')));
     await reopened.locator('#card-profile').selectOption({ label: 'Principal · final 1111' });
     assert.equal(await reopened.locator('[name=cardNumber]').inputValue(), card.cardNumber);
     assert.equal(await reopened.locator('[name=cardCvv]').inputValue(), '');
-    console.log('PASS: Electron real abriu painel e site, preencheu 16 campos + seguro por IPC isolado, preservou perfis criptografados e bloqueou após reiniciar. Compra não finalizada.');
+    console.log('PASS: Electron real: 16 perfis persistentes, cookies isolados entre perfis e compartilhados no mesmo perfil, destino selecionado, 16 campos + seguro, horário por CPF (inclusive duplicado), marcação manual e reinício com cofre bloqueado. Compra não finalizada.');
   } finally {
     await instance?.close().catch(() => {});
     await new Promise(resolve => server.close(resolve));

@@ -2,7 +2,7 @@
 
 Versão 0.2: perfis de compradores e cartões, cofre local com senha e máscaras automáticas de datas.
 
-A versão independente para Windows fica em [desktop/README.md](desktop/README.md). Ela abre o site em uma janela própria e reaproveita o cofre e o preenchimento, sem precisar da extensão.
+A versão independente para Windows fica em [desktop/README.md](desktop/README.md). Ela permite criar vários perfis de navegação com sessões independentes, reaproveita o cofre e o preenchimento e mostra a data e hora da última utilização de cada CPF, sem precisar da extensão.
 
 Extensão local para Chrome e Edge. Preenche os dados do comprador, cartão e endereço de cobrança da página aberta e marca **“Não preciso da proteção”**. A compra é finalizada manualmente no site.
 

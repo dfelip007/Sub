@@ -7,6 +7,7 @@ const { Store } = require('./store.cjs');
 const { Workspace, partition } = require('./workspace.cjs');
 const { canFill, canNavigate, validateValues, eventUrl } = require('./policy.cjs');
 const { readCartTimer, freshTimer, OrderTimers } = require('./cart-timer.cjs');
+const { readQueuePage, QueueStatus } = require('./queue-status.cjs');
 const { readTickets } = require('./ticket-reader.cjs');
 const { Instagram } = require('./instagram.cjs');
 const CONTROL_URL = 'app://manager/popup.html';
@@ -50,7 +51,7 @@ function activeWindow() {
 }
 function state() {
   const selected = activeWindow();
-  const tabs = [...windows.values()].map(entry => ({ id: entry.window.webContents.id, profileId: entry.profileId, revision: entry.generation, url: entry.window.webContents.getURL() || HOME, loading: entry.window.webContents.isLoading(), error: entry.error, timer: cartTimer(entry) }));
+  const tabs = [...windows.values()].map(entry => ({ id: entry.window.webContents.id, profileId: entry.profileId, revision: entry.generation, url: entry.window.webContents.getURL() || HOME, loading: entry.window.webContents.isLoading(), error: entry.error, timer: cartTimer(entry), queue: queueStatus(entry) }));
   const tab = tabs.find(item => item.id === selected?.window.webContents.id) || null;
   return { profiles: browsing.profiles, profileId: browsing.selected, tabs, tab, loading: tab?.loading || false, error: tab?.error || '', launch };
 }
@@ -66,8 +67,15 @@ function current(tabId) {
   return entry;
 }
 const locationGuard = `if (!(${canFill.toString()})(location.href, ${smoke})) throw new Error('Página não permitida para preenchimento.');`;
-const timerCode = `(() => { if (!(${canFill.toString()})(location.href, ${smoke})) return null; return (${readCartTimer.toString()})(document); })()`;
-function resetTimer(entry) { entry.generation++; entry.timer = null; entry.timerReadAt = 0; }
+const timerCode = `(() => { if (!(${canFill.toString()})(location.href, ${smoke})) return null; return { url: location.href, timer: (${readCartTimer.toString()})(document), queue: (${readQueuePage.toString()})(document) }; })()`;
+function resetTimer(entry) { entry.generation++; entry.timer = null; entry.timerReadAt = 0; entry.queueReadAt = 0; }
+function queueStatus(entry) {
+  const contents = entry.window.webContents;
+  if (entry.error) return 'error';
+  if (!canFill(contents.getURL(), smoke)) return 'outside';
+  if (contents.isLoadingMainFrame()) return 'loading';
+  return Date.now() - entry.queueReadAt < 5000 ? entry.queue.status : 'unknown';
+}
 function cartTimer(entry) {
   const contents = entry.window.webContents, url = contents.getURL();
   if (contents.isLoadingMainFrame() && entry.navigationUrl !== url) return null;
@@ -83,20 +91,23 @@ async function readTimer(entry) {
   }
   const generation = entry.generation;
   const startedAt = Date.now();
+  const url = contents.getURL();
   orderTimers.observe(entry.profileId, contents.getURL(), startedAt);
-  const previous = JSON.stringify(freshTimer(entry));
+  const previous = JSON.stringify([freshTimer(entry), queueStatus(entry)]);
   entry.reading = true;
   try {
-    const result = await contents.executeJavaScriptInIsolatedWorld(WORLD, [{ code: timerCode }]);
-    if (entry.window.isDestroyed() || entry.generation !== generation) return;
+    const page = await contents.executeJavaScriptInIsolatedWorld(WORLD, [{ code: timerCode }]);
+    if (entry.window.isDestroyed() || entry.generation !== generation || contents.getURL() !== url || page?.url !== url) return;
+    entry.queue.observe(page.queue, url); entry.queueReadAt = startedAt;
+    const result = page.timer;
     entry.timer = result && Number.isInteger(result.seconds) && result.seconds >= 0 && ['running', 'expired'].includes(result.status) ? result : null;
     entry.timerReadAt = startedAt;
     if (entry.timer) orderTimers.limit(entry.profileId, contents.getURL(), entry.timer.seconds, startedAt);
   } catch {
-    if (entry.generation === generation) { entry.timer = null; entry.timerReadAt = 0; }
+    if (entry.generation === generation) { entry.timer = null; entry.timerReadAt = 0; entry.queueReadAt = 0; }
   } finally {
     entry.reading = false;
-    if (!entry.window.isDestroyed() && previous !== JSON.stringify(freshTimer(entry))) notify();
+    if (!entry.window.isDestroyed() && previous !== JSON.stringify([freshTimer(entry), queueStatus(entry)])) notify();
   }
 }
 function configureSession(profileId) {
@@ -106,7 +117,7 @@ function configureSession(profileId) {
 }
 function registerWindow(window, profileId) {
   const id = window.webContents.id;
-  const entry = { window, profileId, error: '', navigationUrl: '', timer: null, timerReadAt: 0, generation: 0, reading: false };
+  const entry = { window, profileId, error: '', navigationUrl: '', timer: null, timerReadAt: 0, generation: 0, reading: false, queue: new QueueStatus(smoke), queueReadAt: 0 };
   windows.set(id, entry);
   window.webContents.on('did-start-navigation', (_event, url, _inPlace, mainFrame) => { if (mainFrame) { entry.navigationUrl = url; resetTimer(entry); notify(); } });
   window.webContents.on('dom-ready', () => { void readTimer(entry); });
@@ -123,7 +134,7 @@ function registerWindow(window, profileId) {
     const label = browsing.profiles.find(profile => profile.id === profileId)?.label || 'Perfil';
     try { window.setTitle(`${label} — ${new URL(window.webContents.getURL()).hostname || 'Meaple'}`); } catch { window.setTitle(`${label} — Meaple`); }
   };
-  window.webContents.on('page-title-updated', event => { event.preventDefault(); title(); });
+  window.webContents.on('page-title-updated', event => { event.preventDefault(); title(); void readTimer(entry); });
   for (const event of ['did-start-loading', 'did-stop-loading', 'did-navigate', 'did-navigate-in-page']) window.webContents.on(event, () => {
     if (event === 'did-start-loading') entry.error = '';
     title(); notify();

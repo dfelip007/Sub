@@ -1,7 +1,7 @@
 {
   "name": "meaple-checkout-desktop",
   "productName": "Submundo Compras",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "private": true,
   "description": "Submundo Compras: perfis locais, cofre e controle de limite para compras na Meaple.",
   "author": "dfelip007",
@@ -11,7 +11,7 @@
     "prepare:app": "node scripts/prepare.cjs",
     "start": "npm run prepare:app && electron .",
     "test": "node --test test/*.test.cjs",
-    "check": "node --check app/main.cjs && node --check app/preload.cjs && node --check app/store.cjs && node --check app/policy.cjs && node --check app/adapter.js && node --check app/workspace.cjs && node --check app/wallet.js && node --check app/cart-timer.cjs && node --check app/ticket-reader.cjs && node --check app/tickets.js && node --check app/news.cjs && node --check app/news-reader.cjs && node --check app/instagram.cjs",
+    "check": "node --check app/main.cjs && node --check app/preload.cjs && node --check app/store.cjs && node --check app/policy.cjs && node --check app/adapter.js && node --check app/workspace.cjs && node --check app/wallet.js && node --check app/cart-timer.cjs && node --check app/queue-status.cjs && node --check app/ticket-reader.cjs && node --check app/tickets.js && node --check app/news.cjs && node --check app/news-reader.cjs && node --check app/instagram.cjs",
     "build:win": "npm run prepare:app && electron-builder --win portable --x64 --publish never",
     "build:linux:test": "npm run prepare:app && electron-builder --linux dir --x64",
     "test:app": "node scripts/smoke.cjs"

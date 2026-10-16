@@ -157,6 +157,24 @@
     return `${hours ? `${String(hours).padStart(2, '0')}:` : ''}${String(Math.floor(timer.seconds / 60) % 60).padStart(2, '0')}:${String(timer.seconds % 60).padStart(2, '0')}`;
   }
   function urgency(timer) { return !timer ? 'unknown' : timer.seconds === 0 ? 'expired' : timer.seconds <= 120 ? 'urgent' : 'normal'; }
+  function queueLabel(status) {
+    return ({ waiting: 'Na sala de espera', released: 'Liberado para o evento', event: 'Página do evento', checkout: 'No checkout', loading: 'Carregando página…', error: 'Falha ao consultar a página', outside: 'Fora da Meaple' })[status] || 'Status não identificado';
+  }
+  function profileQueue(profileId) {
+    const tabs = state.tabs.filter(tab => tab.profileId === profileId);
+    if (!tabs.length) return { status: 'unknown', text: 'Sem janelas abertas' };
+    if (tabs.length === 1) return { status: tabs[0].queue || 'unknown', text: queueLabel(tabs[0].queue) };
+    const groups = new Map();
+    for (const tab of tabs) groups.set(tab.queue || 'unknown', (groups.get(tab.queue || 'unknown') || 0) + 1);
+    const names = { waiting: 'na sala de espera', released: 'com acesso ao evento', event: 'na página do evento', checkout: 'no checkout', loading: 'carregando', error: 'com falha de leitura', outside: 'fora da Meaple', unknown: 'sem status identificado' };
+    return { status: groups.size === 1 ? [...groups.keys()][0] : 'mixed', text: [...groups].map(([status, count]) => `${count} ${status === 'released' ? count === 1 ? 'liberada para o evento' : 'liberadas para o evento' : names[status] || names.unknown}`).join(' · ') };
+  }
+  function renderProfileQueues() {
+    for (const row of document.querySelectorAll('[data-browser-profile]')) {
+      const summary = profileQueue(row.dataset.browserProfile), badge = row.querySelector('.profile-queue');
+      badge.textContent = summary.text; badge.dataset.queue = summary.status;
+    }
+  }
   function renderTimers() {
     const tab = state.tab, timer = tab?.timer;
     $('cart-clock').dataset.urgency = urgency(timer);
@@ -175,6 +193,7 @@
         const index = state.tabs.filter(other => other.profileId === item.profileId).findIndex(other => other.id === item.id) + 1;
         const main = node('div', '', 'record-main'); main.append(node('strong', `${label} · Janela ${index}`), node('p', '', 'cart-caption'));
         main.append(node('span', '', 'tag used profile-used'));
+        main.append(node('span', '', 'tag queue-status'));
         const time = node('strong', '', 'cart-row-time'); time.setAttribute('role', 'timer'); time.setAttribute('aria-live', 'off');
         row.append(main, time, button('Selecionar', 'cartTab', item.id)); list.append(row);
       }
@@ -186,6 +205,7 @@
       const used = row.querySelector('.profile-used'), profile = state.profiles.find(profile => profile.id === item.profileId);
       used.hidden = !profile?.lastFilledAt;
       used.textContent = profile?.lastFilledAt ? `Utilizado · ${dateTime(profile.lastFilledAt)}` : '';
+      const queue = row.querySelector('.queue-status'); queue.textContent = queueLabel(item.queue); queue.dataset.queue = item.queue || 'unknown';
       row.querySelector('.cart-caption').textContent = item.timer ? `${item.timer.source === 'orders' ? 'Contagem local · ' : ''}${item.timer.seconds === 0 ? 'Contador esgotado' : item.timer.seconds <= 120 ? '2 minutos ou menos' : item.timer.source === 'orders' ? '10 min por pedido' : 'Contador da Meaple'}` : item.loading ? 'Carregando…' : 'Tempo não identificado';
       const control = row.querySelector('button');
       control.textContent = item.id === tab?.id ? 'Selecionada' : 'Selecionar';
@@ -194,9 +214,9 @@
   }
   function renderBrowser() {
     if (!state) return;
-    options($('desktop-profile'), state.profiles.map(item => [`${item.label}${item.lastFilledAt ? ' · Utilizado' : ''}`, item.id]), state.profileId);
+    options($('desktop-profile'), state.profiles.map(item => { const queue = profileQueue(item.id); return [`${item.label}${item.lastFilledAt ? ' · Utilizado' : ''}${queue.status !== 'unknown' ? ` · ${queue.text}` : ''}`, item.id]; }), state.profileId);
     const tabs = state.tabs.filter(item => item.profileId === state.profileId);
-    options($('desktop-target'), tabs.length ? tabs.map((item, index) => [`Janela ${index + 1} · ${new URL(item.url).hostname || 'abrindo…'}`, item.id]) : [['Abra a Meaple neste perfil', '']], state.tab?.id);
+    options($('desktop-target'), tabs.length ? tabs.map((item, index) => [`Janela ${index + 1} · ${new URL(item.url).hostname || 'abrindo…'} · ${queueLabel(item.queue)}`, item.id]) : [['Abra a Meaple neste perfil', '']], state.tab?.id);
     $('desktop-count').textContent = `${state.profiles.length} salvos · ${state.tabs.length} janelas abertas`;
     const selectedProfile = state.profiles.find(item => item.id === state.profileId);
     $('selected-browser-label').textContent = selectedProfile ? `${selectedProfile.label}${selectedProfile.lastFilledAt ? ' · Utilizado' : ''}` : '';
@@ -210,12 +230,13 @@
     for (const label of document.querySelectorAll('[data-launch-state]')) label.textContent = launchText;
     const list = $('browsers-list');
     const signature = JSON.stringify([state.profiles, state.profileId, state.tabs.map(item => [item.id, item.profileId])]);
-    if (list.dataset.structure === signature) return;
+    if (list.dataset.structure === signature) { renderProfileQueues(); return; }
     list.dataset.structure = signature; list.replaceChildren();
     for (const profile of state.profiles) {
       const row = node('div', '', 'record-row'); const main = node('div', '', 'record-main');
       row.dataset.browserProfile = profile.id;
       main.append(node('strong', profile.label), node('p', `${state.tabs.filter(tab => tab.profileId === profile.id).length} janelas abertas${profile.id === state.profileId ? ' · Selecionado' : ''}`));
+      main.append(node('span', '', 'tag profile-queue'));
       const actions = node('div', '', 'actions');
       if (profile.lastFilledAt) {
         main.append(node('span', `Utilizado · ${dateTime(profile.lastFilledAt)}`, 'tag used'));
@@ -224,6 +245,7 @@
       actions.append(button('Usar este perfil ↗', 'useProfile', profile.id));
       row.append(node('div', '▦', 'avatar'), main, actions); list.append(row);
     }
+    renderProfileQueues();
   }
   function renderProfiles() {
     const buyers = wallet.unlocked ? wallet.list('buyers') : [];

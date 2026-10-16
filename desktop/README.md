@@ -6,7 +6,7 @@ A marca e a logo Submundo / 808 aparecem no painel e nos ícones do Windows. A i
 
 ## Usar e atualizar
 
-1. Feche a versão anterior e execute `Submundo-Compras-0.8.2-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados e o PIN das versões 0.4/0.5/0.6/0.7 permanecem no mesmo diretório. Para cofres das versões 0.1/0.2/0.3, use a senha existente uma vez, sem apagar o cofre, e depois defina seu PIN de 4 números em **Contato e ajustes → PIN do cofre**. Os cartões antigos começam sem limite informado e sem CVV salvo.
+1. Feche a versão anterior e execute `Submundo-Compras-0.8.3-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados e o PIN das versões 0.4/0.5/0.6/0.7 permanecem no mesmo diretório. Para cofres das versões 0.1/0.2/0.3, use a senha existente uma vez, sem apagar o cofre, e depois defina seu PIN de 4 números em **Contato e ajustes → PIN do cofre**. Os cartões antigos começam sem limite informado e sem CVV salvo.
 2. Desbloqueie o cofre com o PIN ou crie um PIN de exatamente 4 números no primeiro uso. Em **Contato e ajustes**, salve e-mail e telefone.
 3. Em **Compradores**, use **Novo comprador** para cadastrar nome, CPF e nascimento. Em **Cartões**, use **Novo cartão** para cadastrar número, titular, validade, endereço e limite disponível. A gravação de CVV é opcional por cartão: informe o código e marque **Salvar o CVV no cofre deste cartão**.
 4. Em **Perfis de navegação**, informe um prefixo e a quantidade (por exemplo, 15) e clique em **Criar perfis**. Você pode manter até 100 perfis, criando até 50 por vez. **Usar este perfil** abre a Meaple na sessão escolhida. Faça login, escolha ingressos e avance ao checkout.
@@ -41,6 +41,19 @@ Para cada perfil, o programa reaproveita uma janela que já esteja exatamente no
 A navegação começa imediatamente em pequenos grupos, com progresso no painel; a abertura de outros perfis não espera a conexão de cada site terminar. Ao concluir, o painel informa quantas janelas foram criadas/reaproveitadas e eventuais falhas ao criar janelas. O carregamento do site continua independentemente em cada sessão; aguarde-o antes de comprar. A abertura em lote aceita links HTTPS da Meaple/subdomínios, sem usuário/senha embutidos. A navegação de pagamento existente continua permitindo provedores HTTPS.
 
 O fluxo foi testado em Electron real com 16 perfis, sessões isoladas, cofre bloqueado, link inválido recusado, repetição sem duplicar, Enter no campo de link, carrinhos preservados e criação de uma nova janela para um perfil que já avançou no evento. O teste usa páginas locais fictícias; o carregamento do evento real depende da conexão e do acesso à Meaple.
+
+## Sala de espera e acesso ao evento
+
+A **Visão geral** da tela Comprar mostra o status de cada janela. **Perfis de navegação**, o seletor de perfil e o seletor de janela também mostram a situação. A leitura é automática, aproximadamente a cada segundo, com janelas em segundo plano e cofre bloqueado. Se um perfil tiver várias janelas, o resumo mostra as quantidades por situação — por exemplo, **1 na sala de espera · 1 liberada para o evento** — sem tratar todas como liberadas.
+
+- **Na sala de espera**: o título contém Sala de espera, Fila de espera ou Waiting room; também aceita um cabeçalho visível com esses nomes. O título do print do usuário, SUBMUNDO 808 — Sala de espera, é reconhecido.
+- **Liberado para o evento**: essa mesma janela foi observada na espera e agora exibe uma página de evento identificável, com cabeçalho e ação de ingresso visíveis. A correspondência usa a mesma rota ou o nome do evento observado no título da espera. Isso é uma indicação da página exibida; não confirma autorização no servidor nem reserva de ingresso.
+- **Página do evento**: a página foi reconhecida, mas não houve espera correspondente observada nessa janela. Não se inventa uma passagem pela fila.
+- **No checkout**, **Carregando página…**, **Falha ao consultar a página**, **Fora da Meaple** ou **Status não identificado** completam os estados. Trocar de página/título sozinho não comprova liberação. Páginas de erro, conteúdo não reconhecido e sites externos não recebem Liberado. Se a janela voltar à sala de espera, o status volta também.
+
+O módulo `queue-status.cjs` apenas lê título, cabeçalhos e ações visíveis da página, em mundo isolado com validação de origem/URL/geração. Não lê cookies ou tokens, não clica, não recarrega a fila, não altera sessões e não consulta APIs. Sinais sem nova leitura por cinco segundos deixam de ser considerados atuais. O status é por janela e fica somente em memória; ao reiniciar é verificado de novo, sem reutilizar uma liberação antiga. A marca Utilizado e o contador do carrinho continuam independentes.
+
+A Meaple real continua sem validação de fila nesta nuvem por bloqueio do proxy. Testes com páginas fictícias cobrem o título fornecido, chegada ao evento, erros, ausência de sinais, retorno à espera, página externa, várias janelas do mesmo perfil e foco dos controles. O formato atual do site pode exigir adaptação; consulte a janela real se o programa não identificar o estado.
 
 ## Perfil de navegação utilizado
 

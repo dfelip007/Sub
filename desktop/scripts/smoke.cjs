@@ -22,6 +22,7 @@ const root = path.resolve(__dirname, '../..');
     }
     if (/^\/(stories|p|reel)\//.test(pathname)) { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end('<h1>Instagram fictício — conteúdo</h1>'); return; }
     if (/^\/orders(?:\/|$)/.test(pathname)) { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end('<h1>Dados do Comprador</h1><p>Checkout fictício sem contador visível.</p>'); return; }
+    if (pathname === '/808/evento-teste') { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end('<title>SUBMUNDO 808 — Meaple</title><h1>SUBMUNDO 808</h1><button>Comprar ingressos</button>'); return; }
     response.setHeader('Content-Type', request.url === '/demo.js' ? 'application/javascript' : 'text/html; charset=utf-8');
     response.end(request.url === '/demo.js' ? demoScript : fixture);
   });
@@ -95,6 +96,20 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await instance.evaluate(({ app }) => app.getName()), 'Submundo Compras');
     panel.on('dialog', dialog => dialog.accept());
     const nav = async view => panel.locator(`.sidebar [data-view=${view}]`).click();
+    await site.evaluate(() => { document.title = 'SUBMUNDO 808 — Sala de espera - meaple.com.br/808/submundo'; });
+    await waitCheckout(panel, state => state.tab.queue === 'waiting');
+    await panel.waitForFunction(() => document.querySelector('#cart-list .queue-status')?.textContent === 'Na sala de espera');
+    await site.goto('http://127.0.0.1:8080/808/evento-teste');
+    await waitCheckout(panel, state => state.tab.queue === 'released');
+    await panel.waitForFunction(() => document.querySelector('#cart-list .queue-status').textContent === 'Liberado para o evento');
+    await site.evaluate(() => { document.title = 'Página não encontrada'; });
+    await waitCheckout(panel, state => state.tab.queue === 'error');
+    await site.evaluate(() => { document.title = 'Meaple'; document.querySelector('button').remove(); });
+    await waitCheckout(panel, state => state.tab.queue === 'unknown');
+    await site.evaluate(() => { document.title = 'SUBMUNDO 808 — Sala de espera'; });
+    await waitCheckout(panel, state => state.tab.queue === 'waiting');
+    await site.goto('http://127.0.0.1:8080/checkout.html');
+    await panel.waitForFunction(() => document.querySelector('#cart-time').textContent === '09:58');
     // News works independently of the vault and the Meaple browser sessions.
     await nav('news');
     await panel.waitForFunction(() => document.querySelectorAll('.news-profile').length === 2);
@@ -283,6 +298,22 @@ const root = path.resolve(__dirname, '../..');
     await panel.waitForFunction(() => document.querySelector('#desktop-target').options.length === 2);
     const thirdId = (await panel.evaluate(() => desktopBridge.checkout())).tab.id;
     const third = await findWindow(thirdId); await third.waitForLoadState();
+    for (const page of [second, third]) await page.evaluate(() => { document.title = 'SUBMUNDO 808 — Sala de espera'; });
+    await waitCheckout(panel, state => [newTabId, thirdId].every(id => state.tabs.find(tab => tab.id === id)?.queue === 'waiting'));
+    await second.evaluate(() => { document.title = 'SUBMUNDO 808 — Meaple'; document.querySelector('h1').textContent = 'SUBMUNDO 808'; const button = document.createElement('button'); button.id = 'queue-test-buy'; button.type = 'button'; button.textContent = 'Comprar ingressos'; document.body.append(button); });
+    await waitCheckout(panel, state => state.tabs.find(tab => tab.id === newTabId)?.queue === 'released' && state.tabs.find(tab => tab.id === thirdId)?.queue === 'waiting');
+    await nav('browsers');
+    await panel.waitForFunction(id => { const text = document.querySelector(`[data-browser-profile="${id}"] .profile-queue`)?.textContent; return text?.includes('1 na sala de espera') && text.includes('1 liberada para o evento'); }, selectedProfile);
+    await panel.screenshot({ path: path.join(root, 'test-results/desktop-queue.png'), fullPage: true });
+    await nav('buy');
+    await panel.locator('#cart-overview').evaluate(details => { details.open = true; });
+    await panel.locator(`[data-cart-tab="${thirdId}"]`).focus();
+    assert.equal(await panel.evaluate(() => document.activeElement.dataset.cartTab), String(thirdId));
+    await third.evaluate(() => { document.title = 'Checkout de demonstração'; });
+    await waitCheckout(panel, state => state.tabs.find(tab => tab.id === thirdId)?.queue === 'unknown');
+    assert.equal(await panel.evaluate(() => document.activeElement.dataset.cartTab), String(thirdId), 'Atualizar status da fila não recria os controles nem perde foco.');
+    await panel.locator('#cart-overview').evaluate(details => { details.open = false; });
+    await second.evaluate(() => { document.title = 'Checkout de demonstração'; document.querySelector('#queue-test-buy').remove(); });
     await second.locator('#cart-counter').evaluate(element => { element.textContent = '01:30'; });
     await third.locator('#cart-counter').evaluate(element => { element.textContent = '03:45'; });
     await third.locator('.fixture-lot').evaluate(element => { element.textContent = '3º lote'; });
@@ -319,9 +350,10 @@ const root = path.resolve(__dirname, '../..');
     await third.evaluate(() => { document.querySelector('#cart-deadline').hidden = false; history.pushState({}, '', '/checkout.html'); });
     await waitCheckout(panel, state => state.tabs.find(tab => tab.id === thirdId)?.timer?.seconds === 225);
     // An HTTPS payment-provider window must not be inspected, even if its text looks identical.
-    await second.route('https://provider.example.invalid/**', route => route.fulfill({ contentType: 'text/html', body: '<p>Seu carrinho expira em 10:00</p>' }));
+    await second.route('https://provider.example.invalid/**', route => route.fulfill({ contentType: 'text/html', body: '<title>SUBMUNDO 808 — Sala de espera</title><p>Seu carrinho expira em 10:00</p>' }));
     await second.goto('https://provider.example.invalid/payment');
     await waitCheckout(panel, state => state.tab.url.startsWith('https://provider.example.invalid/'));
+    assert.equal((await panel.evaluate(() => desktopBridge.checkout())).tab.queue, 'outside');
     assert.equal(await panel.locator('#cart-time').textContent(), '—');
     await assert.rejects(panel.evaluate(id => desktopBridge.tickets(id), newTabId), /checkout da Meaple/);
     await second.goto('http://127.0.0.1:8080/checkout.html');
@@ -547,7 +579,7 @@ require(${JSON.stringify(path.join(root, 'desktop/app/main.cjs'))});`);
     await branded.locator('.sidebar [data-view=buy]').click();
     await branded.locator('#card-profile').selectOption({ label: 'Principal · final 1111' });
     assert.match(await branded.locator('#buy-balance').textContent(), /876,55/);
-    console.log('PASS: Electron real: perfil Utilizado após preencher, tentativas vazias/falhas sem marca, horário persistido, janelas do perfil, limpeza independente de CPF e outros perfis; /orders/ inicia dez minutos sem contador, diminui, não renova ao recarregar e compartilha prazo por pedido/perfil; outro pedido tem prazo próprio; novidades com primeira referência sem alerta, novo post/story identificado, avisos locais, login sem apagar último sucesso, pausa, histórico após reiniciar e cookies Instagram separados da Meaple; consulta não interrompe o story aberto; abrir evento nos 16 perfis com cofre bloqueado, link validado, cookies isolados, seleção/carrinhos preservados, repetição sem duplicar e Enter sem preencher; leitura de evento, lotes, quantidade, valores e total; estoque apenas após pagamento registrado; rateio exato, preço de revenda e CSV sem cartão/CPF; edição de lote preserva limite; rascunhos isolados por janela e persistência criptografada após reiniciar; contador automático por janela com cofre bloqueado, atualização, urgência, expiração, ausência, navegação, exclusão de provedor externo, seleção e fechamento; layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores; PIN com zero à esquerda e migração da senha antiga sem perda de dados.');
+    console.log('PASS: Electron real: sala de espera por título, liberação do mesmo evento, retorno à espera, erro e página desconhecida sem falsa liberação; perfil com janelas em estados diferentes e foco preservado; perfil Utilizado após preencher, tentativas vazias/falhas sem marca, horário persistido, janelas do perfil, limpeza independente de CPF e outros perfis; /orders/ inicia dez minutos sem contador, diminui, não renova ao recarregar e compartilha prazo por pedido/perfil; outro pedido tem prazo próprio; novidades com primeira referência sem alerta, novo post/story identificado, avisos locais, login sem apagar último sucesso, pausa, histórico após reiniciar e cookies Instagram separados da Meaple; consulta não interrompe o story aberto; abrir evento nos 16 perfis com cofre bloqueado, link validado, cookies isolados, seleção/carrinhos preservados, repetição sem duplicar e Enter sem preencher; leitura de evento, lotes, quantidade, valores e total; estoque apenas após pagamento registrado; rateio exato, preço de revenda e CSV sem cartão/CPF; edição de lote preserva limite; rascunhos isolados por janela e persistência criptografada após reiniciar; contador automático por janela com cofre bloqueado, atualização, urgência, expiração, ausência, navegação, exclusão de provedor externo, seleção e fechamento; layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores; PIN com zero à esquerda e migração da senha antiga sem perda de dados.');
   } catch (error) {
     const panel = instance?.windows().find(page => page.url() === 'app://manager/popup.html');
     if (panel) { await panel.screenshot({ path: path.join(root, 'test-results/desktop-error.png'), fullPage: true }).catch(() => {}); console.error('UI:', await panel.locator('#message').textContent().catch(() => '')); }

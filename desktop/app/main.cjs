@@ -36,7 +36,7 @@ let browsing;
 let storage;
 let quitting = false;
 let timerPoll;
-let launch = { running: false, total: 0, processed: 0, created: 0, reused: 0, failed: [] };
+let launch = { running: false, total: 0, processed: 0, created: 0, reused: 0, failed: [], failureDetails: [] };
 
 const ui = path.join(__dirname, 'ui');
 const safeWeb = { nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, allowRunningInsecureContent: false, webviewTag: false, navigateOnDragDrop: false };
@@ -154,7 +154,7 @@ async function openAllProfiles(value) {
   if (launch.running) throw new Error('Aguarde a abertura dos perfis terminar.');
   const url = eventUrl(value, smoke);
   const profiles = [...browsing.profiles];
-  launch = { running: true, total: profiles.length, processed: 0, created: 0, reused: 0, failed: [] };
+  launch = { running: true, total: profiles.length, processed: 0, created: 0, reused: 0, failed: [], failureDetails: [] };
   notify();
   try {
     for (const profile of profiles) {
@@ -171,7 +171,10 @@ async function openAllProfiles(value) {
           if (existing.error) { existing.error = ''; existing.window.loadURL(url).catch(() => {}); }
           launch.reused++;
         } else { createCheckoutWindow(profile.id, url); launch.created++; }
-      } catch { launch.failed.push(profile.label); }
+      } catch (error) {
+        launch.failed.push(profile.label);
+        launch.failureDetails.push({ profile: profile.label, reason: String(error.message || 'Não foi possível criar a janela.').slice(0, 500) });
+      }
       launch.processed++;
       // Start navigation immediately; yield between small groups so the panel
       // stays responsive. Never wait for one site's network load to open others.

@@ -324,7 +324,7 @@ const root = path.resolve(__dirname, '../..');
     await reopened.locator('#view-browsers [data-open-all]').click();
     await reopened.waitForFunction(async () => { const state = await desktopBridge.checkout(); return state.launch.processed === 16 && !state.launch.running && !document.querySelector('#view-browsers [data-open-all]').disabled; });
     const bulk = await reopened.evaluate(() => desktopBridge.checkout());
-    assert.equal(bulk.launch.created, 16); assert.equal(bulk.launch.reused, 0); assert.deepEqual(bulk.launch.failed, []);
+    assert.equal(bulk.launch.created, 16, JSON.stringify(bulk.launch)); assert.equal(bulk.launch.reused, 0); assert.deepEqual(bulk.launch.failed, []);
     assert.equal(bulk.profileId, beforeBulk.profileId); assert.equal(bulk.tab.id, beforeBulk.tab.id);
     assert.equal(bulk.tabs.length, beforeBulk.tabs.length + 16);
     // The native state initially reports in-flight URLs as HOME, so wait for

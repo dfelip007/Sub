@@ -2,7 +2,7 @@
 
 Versão 0.2: perfis de compradores e cartões, cofre local com senha e máscaras automáticas de datas.
 
-A versão independente para Windows fica em [desktop/README.md](desktop/README.md). Ela permite criar vários perfis de navegação com sessões independentes, reaproveita o cofre e o preenchimento e mostra a data e hora da última utilização de cada CPF, sem precisar da extensão.
+A versão independente para Windows fica em [desktop/README.md](desktop/README.md). A versão desktop 0.3 tem navegação por telas, vários perfis com sessões independentes, CVV salvo opcionalmente no cofre, limite disponível por cartão e histórico de compras pagas. Também mostra a última utilização de cada CPF, sem precisar da extensão. As instruções abaixo se referem à extensão, que continua sem salvar CVV.
 
 Extensão local para Chrome e Edge. Preenche os dados do comprador, cartão e endereço de cobrança da página aberta e marca **“Não preciso da proteção”**. A compra é finalizada manualmente no site.
 

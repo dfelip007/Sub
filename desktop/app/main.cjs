@@ -165,7 +165,7 @@ function handlers() {
   });
 }
 async function start() {
-  const allowed = new Set(['popup.html', 'popup.css', 'popup.js', 'dates.js', 'vault.js', 'profiles.js', 'import.js', 'fill.js', 'adapter.js']);
+  const allowed = new Set(['popup.html', 'popup.css', 'dates.js', 'vault.js', 'wallet.js', 'import.js', 'fill.js', 'adapter.js']);
   protocol.handle('app', async request => {
     const url = new URL(request.url);
     const name = url.pathname.slice(1);
@@ -177,7 +177,7 @@ async function start() {
   workspace = new Workspace(path.join(app.getPath('userData'), 'profiles'));
   browsing = await workspace.init();
   handlers();
-  controller = new BrowserWindow({ title: 'Meaple — Perfis e preenchimento', width: 620, height: 860, minWidth: 570, minHeight: 640, show: false, backgroundColor: '#101218', webPreferences: { ...safeWeb, preload: path.join(__dirname, 'preload.cjs') } });
+  controller = new BrowserWindow({ title: 'Meaple — Assistente de compras', width: 1100, height: 900, minWidth: 760, minHeight: 640, show: false, backgroundColor: '#f4f6f9', webPreferences: { ...safeWeb, preload: path.join(__dirname, 'preload.cjs') } });
   controller.webContents.on('will-navigate', event => event.preventDefault());
   controller.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   controller.once('ready-to-show', () => { controller.show(); controller.focus(); });

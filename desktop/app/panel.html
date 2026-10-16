@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Meaple — Assistente de compras</title><link rel="stylesheet" href="popup.css"></head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">m.</span><div>Meaple<span>Assistente de compras</span></div></div>
+    <p class="nav-caption">SEU ESPAÇO DE TRABALHO</p>
+    <nav aria-label="Navegação principal">
+      <button type="button" data-view="buy" aria-current="page"><span>↗︎</span> Comprar</button>
+      <button type="button" data-view="buyers"><span>◎</span> Compradores</button>
+      <button type="button" data-view="cards"><span>▤</span> Cartões</button>
+      <button type="button" data-view="browsers"><span>▦</span> Perfis de navegação</button>
+      <button type="button" data-view="history"><span>◷</span> Histórico de compras</button>
+      <button type="button" data-view="settings"><span>⚙︎</span> Contato e ajustes</button>
+    </nav>
+    <div class="sidebar-bottom"><span class="local-dot"></span> Dados neste computador<p>Seu cofre, seus cadastros.<br>Versão 0.3</p></div>
+  </aside>
+  <main>
+    <header class="page-header"><div><p class="eyebrow">ORGANIZE. PREENCHA. CONFIRA.</p><h1 id="page-title">Uma compra de cada vez.</h1><p id="page-subtitle">Escolha o perfil, o comprador e o cartão. O resto fica mais rápido.</p></div><div class="vault-controls"><span id="vault-state" class="pill">Carregando…</span><button id="vault-lock" type="button" class="quiet" hidden>Bloquear cofre</button></div></header>
+    <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+    <section id="vault-panel" class="surface unlock-panel">
+      <div><span class="step-icon">◇</span><h2 id="vault-title">Seu cofre pessoal</h2><p id="vault-description">Cadastros protegidos por uma senha, neste computador.</p></div>
+      <form id="vault-form" autocomplete="off"><div class="grid"><label>Senha do cofre<input id="vault-password" type="password" required autocomplete="off"></label><label id="vault-confirm-label">Repita a senha<input id="vault-confirm" type="password" autocomplete="off"></label></div><button id="vault-unlock" type="submit">Criar cofre e começar</button><p class="hint">Guarde sua senha. Ela é necessária para acessar compradores e cartões.</p></form>
+    </section>
+    <section id="view-buy" class="view">
+      <form id="checkout" autocomplete="off" novalidate>
+        <section class="surface"><div class="section-heading"><h2><span class="step">1</span> Onde você vai comprar?</h2><button type="button" data-view="browsers" class="text-button">Gerenciar perfis →</button></div>
+          <div class="destination-row"><label>Perfil de navegação<select id="desktop-profile"></select></label><label>Janela que será preenchida<select id="desktop-target"></select></label><button type="button" id="desktop-open" class="secondary">Abrir / ver Meaple ↗︎</button></div><p id="desktop-state" class="hint" role="status">Carregando perfis…</p>
+        </section>
+        <fieldset id="purchase-fields" disabled>
+          <section class="surface"><div class="section-heading"><h2><span class="step">2</span> Quem compra e como paga?</h2></div>
+            <div class="grid"><label>Comprador<select id="buyer-profile"><option value="">Selecione um comprador</option></select><button type="button" data-new="buyer" class="inline-link">+ Cadastrar comprador</button></label><label>Cartão<select id="card-profile"><option value="">Selecione um cartão</option></select><button type="button" data-new="card" class="inline-link">+ Cadastrar cartão</button></label></div>
+            <div class="purchase-summary"><div class="buyer-usage"><label class="check"><input id="desktop-used" type="checkbox" disabled> Já utilizado</label><p id="desktop-usage-state" class="hint">Selecione um comprador para consultar a última utilização.</p></div><div class="balance-summary"><span>Disponível no programa</span><strong id="buy-balance">—</strong><small id="buy-projection">Selecione um cartão cadastrado.</small></div></div>
+            <div class="grid three"><label>CVV<input id="purchase-cvv" name="cardCvv" type="password" inputmode="numeric" maxlength="4" autocomplete="off"><small id="cvv-help">Informe o código de segurança.</small></label><label>Parcelas<select id="purchase-installments"><option value="">Manter no site</option><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option><option value="6">6x</option><option value="7">7x</option><option value="8">8x</option><option value="9">9x</option><option value="10">10x</option><option value="11">11x</option><option value="12">12x</option></select></label><label>Valor total da compra (R$)<input id="purchase-amount" inputmode="decimal" placeholder="Ex.: 250,00"><small>Pode informar depois do pagamento.</small></label></div>
+            <div id="contact-reminder" class="callout" hidden>Configure o e-mail e o telefone que receberão os ingressos. <button type="button" data-view="settings" class="inline-link">Configurar contato →</button></div>
+            <div class="fill-actions"><div><strong>Pronto para preencher?</strong><p class="hint">Seguro selecionado como “Não preciso da proteção”.</p></div><button type="submit" id="fill">Preencher checkout →</button></div>
+            <p id="status" role="status" aria-live="polite"></p><ul id="details"></ul>
+          </section>
+          <section class="surface next-step"><h2><span class="step">3</span> Pagamento aprovado?</h2><p class="hint">Finalize na Meaple. Depois, registre a compra paga para descontar o valor do limite.</p><div id="pending-orders"></div></section>
+        </fieldset>
+      </form>
+    </section>
+    <section id="view-buyers" class="view" hidden>
+      <div class="view-actions"><label class="search">Buscar comprador<input id="buyer-search" type="search" placeholder="Nome ou CPF"></label><button type="button" data-new="buyer">+ Novo comprador</button></div>
+      <div id="buyers-list" class="record-list"></div>
+      <section id="buyer-editor" class="surface editor" hidden><div class="section-heading"><h2 id="buyer-editor-title">Novo comprador</h2><button type="button" data-close="buyer-editor" class="quiet">Fechar ✕</button></div>
+        <form id="buyer-form" autocomplete="off"><input type="hidden" id="buyer-id"><label>Nome para identificar o cadastro<input id="buyer-label" required maxlength="80" placeholder="Ex.: Daniel"></label><label>Nome completo<input name="buyerName" required></label><div class="grid"><label>CPF<input name="cpf" required inputmode="numeric" placeholder="000.000.000-00"></label><label>Data de nascimento<input name="birthDate" required inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa"></label></div><div class="actions"><button id="buyer-save" type="submit">Salvar comprador</button><button id="buyer-delete" type="button" class="danger quiet" hidden>Excluir cadastro</button></div><p class="hint">O e-mail e o telefone são os mesmos do contato fixo.</p></form>
+      </section>
+    </section>
+    <section id="view-cards" class="view" hidden>
+      <div class="view-actions"><p class="hint">Veja o disponível e escolha um cartão para editar.</p><button type="button" data-new="card">+ Novo cartão</button></div>
+      <div id="cards-list" class="record-grid"></div>
+      <section id="card-editor" class="surface editor" hidden><div class="section-heading"><h2 id="card-editor-title">Novo cartão</h2><button type="button" data-close="card-editor" class="quiet">Fechar ✕</button></div>
+        <form id="card-form" autocomplete="off"><input type="hidden" id="card-id"><div class="grid"><label>Nome do cartão<input id="card-label" required maxlength="80" placeholder="Ex.: Principal"></label><label>Limite disponível agora (R$)<input id="card-available" inputmode="decimal" placeholder="Ex.: 1.500,00"><small>Confira o disponível no banco. Pode deixar em branco.</small></label></div><div class="grid"><label>Número do cartão<input name="cardNumber" type="password" required inputmode="numeric" autocomplete="off"></label><label>Nome do titular<input name="cardHolder" required autocomplete="off"></label></div><div class="grid"><label>Validade<input name="cardExpiry" required inputmode="numeric" placeholder="MM/AA" maxlength="5"></label><label>CVV para salvar (opcional)<input name="savedCvv" type="password" inputmode="numeric" maxlength="4" autocomplete="off"></label></div><label class="check"><input id="card-save-cvv" type="checkbox"> Salvar o CVV no cofre deste cartão</label><p class="hint">Opcional. O CVV salvo será preenchido junto com o cartão após desbloquear o cofre.</p>
+          <details class="billing" open><summary>Endereço de cobrança</summary><div class="grid"><label>País<input name="country" value="Brasil" required></label><label>CEP<input name="postalCode" required inputmode="numeric" placeholder="00000-000"></label></div><div class="grid"><label>Cidade<input name="city" required></label><label>Estado (UF)<input name="state" required maxlength="2" placeholder="SP"></label></div><div class="grid"><label>Rua<input name="street" required></label><label>Número<input name="streetNumber" required></label></div></details>
+          <div class="actions"><button id="card-save" type="submit">Salvar cartão</button><button id="card-delete" type="button" class="danger quiet" hidden>Excluir cartão</button></div><p id="card-limit-help" class="hint">Compras pagas registradas no programa serão descontadas automaticamente do disponível.</p>
+        </form>
+      </section>
+    </section>
+    <section id="view-browsers" class="view" hidden>
+      <section class="surface"><h2>Um perfil para cada sessão</h2><p class="hint">Cada perfil mantém seu próprio login na Meaple. Crie vários de uma vez e abra quando precisar.</p><form id="browser-form"><div class="grid"><label>Nome ou prefixo<input id="desktop-label" maxlength="70" placeholder="Ex.: Compras" required></label><label>Quantidade<input id="desktop-quantity" type="number" min="1" max="50" value="1" required></label></div><button type="submit" id="desktop-create">Criar perfis</button></form></section>
+      <div class="section-heading"><h2>Seus perfis</h2><span id="desktop-count" class="hint"></span></div><div id="browsers-list" class="record-list"></div>
+      <section class="surface"><h2>Perfil selecionado</h2><p id="selected-browser-label"></p><label>Novo nome<input id="browser-rename-label" maxlength="80" placeholder="Nome do perfil"></label><div class="actions"><button type="button" id="desktop-rename" class="secondary">Renomear</button><button type="button" id="desktop-new-window" class="secondary">Nova janela neste perfil</button><button type="button" id="desktop-delete" class="danger quiet">Excluir perfil</button></div></section>
+    </section>
+    <section id="view-history" class="view" hidden><div class="view-actions"><p class="hint">Pendentes não alteram o limite. Somente compras registradas como pagas são descontadas.</p><label>Mostrar<select id="history-filter"><option value="all">Todos os registros</option><option value="pending">Aguardando confirmação</option><option value="confirmed">Compras pagas</option><option value="reversed">Registros desfeitos</option><option value="canceled">Cancelados</option></select></label></div><div id="history-list" class="record-list"></div></section>
+    <section id="view-settings" class="view" hidden>
+      <section class="surface"><h2>Contato fixo</h2><p class="hint">Estes dados serão usados em todas as compras.</p><form id="contact-form"><div class="grid"><label>E-mail<input name="email" type="email" required autocomplete="off"></label><label>Telefone com DDD<input name="phone" type="tel" required inputmode="tel" placeholder="11 99999-9999"></label></div><div class="actions"><button id="save-contact" type="submit">Salvar contato</button><button id="forget-contact" type="button" class="quiet">Apagar contato</button></div></form></section>
+      <section class="surface"><h2>Importar dados</h2><p class="hint">Cole uma informação por linha: Nome: …, CPF: …, Nascimento: …, Cartão: …, Titular: …, Validade: …, CVV: …, CEP: …, Cidade: …, Estado: …, Rua: …, Número: …</p><label>Dados da compra<textarea id="import-data" rows="5" autocomplete="off"></textarea></label><button type="button" id="import" class="secondary">Preparar cadastros</button><p class="hint">O texto é apagado após importar. Revise e salve cada cadastro; salvar CVV é opcional.</p></section>
+      <section class="surface"><h2>Sobre seus dados</h2><p class="hint">Cadastros e histórico financeiro ficam no cofre criptografado. O programa não consulta o saldo do banco. Ajuste o disponível ao pagar a fatura ou usar o cartão fora dele. O cofre bloqueia após 15 minutos.</p><button id="vault-reset" type="button" class="danger quiet">Apagar cofre e cadastros</button></section>
+    </section>
+  </main>
+</div>
+<dialog id="order-dialog"><form id="order-form"><div class="section-heading"><h2>Registrar compra paga</h2><button type="button" id="order-close" class="quiet">Fechar ✕</button></div><p id="order-description"></p><label>Valor total pago (R$)<input id="order-amount" inputmode="decimal" required placeholder="250,00"></label><label>Número do pedido (opcional)<input id="order-reference" maxlength="100" autocomplete="off"></label><p id="order-projection" class="callout"></p><p class="hint">Confirme somente após o pagamento ser aprovado na Meaple. O total será descontado do disponível, inclusive em compras parceladas.</p><p id="order-error" role="alert"></p><button type="submit" id="order-confirm">Confirmar e descontar do limite</button></form></dialog>
+<script src="dates.js"></script><script src="vault.js"></script><script src="wallet.js"></script><script src="import.js"></script><script src="adapter.js"></script>
+</body></html>

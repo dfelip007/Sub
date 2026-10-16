@@ -111,7 +111,7 @@
         this.list(kind);
         const next = structuredClone(this.data);
         const key = this.key;
-        const result = update(next[kind]);
+        const result = update(next[kind], next);
         const envelope = await this.encrypt(next, key, this.envelope.salt);
         if (!this.unlocked || this.key !== key) throw new Error('O cofre foi bloqueado. Desbloqueie e tente novamente.');
         await this.storage.local.set({ [KEY]: envelope });

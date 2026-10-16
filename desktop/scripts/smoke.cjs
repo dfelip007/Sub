@@ -32,6 +32,18 @@ const root = path.resolve(__dirname, '../..');
     }
     throw new Error('Painel local não abriu.');
   }
+  async function waitCheckout(page, predicate) {
+    // Playwright 1.56 waitForFunction treats a returned Promise as truthy;
+    // asynchronous IPC predicates must be awaited and polled from Node.
+    const deadline = Date.now() + 45000;
+    let state;
+    while (Date.now() < deadline) {
+      state = await page.evaluate(() => desktopBridge.checkout());
+      if (predicate(state)) return state;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error(`Estado do checkout não ficou pronto: ${JSON.stringify({ launch: state?.launch, tabs: state?.tabs })}`);
+  }
   try {
     instance = await launch();
     const panel = await getPanel(instance);
@@ -201,7 +213,7 @@ const root = path.resolve(__dirname, '../..');
     // An HTTPS payment-provider window must not be inspected, even if its text looks identical.
     await second.route('https://provider.example.invalid/**', route => route.fulfill({ contentType: 'text/html', body: '<p>Seu carrinho expira em 10:00</p>' }));
     await second.goto('https://provider.example.invalid/payment');
-    await panel.waitForFunction(async () => (await desktopBridge.checkout()).tab.url.startsWith('https://provider.example.invalid/'));
+    await waitCheckout(panel, state => state.tab.url.startsWith('https://provider.example.invalid/'));
     assert.equal(await panel.locator('#cart-time').textContent(), '—');
     await assert.rejects(panel.evaluate(id => desktopBridge.tickets(id), newTabId), /checkout da Meaple/);
     await second.goto('http://127.0.0.1:8080/checkout.html');
@@ -322,15 +334,14 @@ const root = path.resolve(__dirname, '../..');
     await reopened.locator('#browser-event-link').fill(eventUrl);
     assert.equal(await reopened.locator('#event-link').inputValue(), eventUrl);
     await reopened.locator('#view-browsers [data-open-all]').click();
-    await reopened.waitForFunction(async () => { const state = await desktopBridge.checkout(); return state.launch.processed === 16 && !state.launch.running && !document.querySelector('#view-browsers [data-open-all]').disabled; });
-    const bulk = await reopened.evaluate(() => desktopBridge.checkout());
+    const bulk = await waitCheckout(reopened, state => state.launch.processed === 16 && !state.launch.running);
+    await reopened.waitForFunction(() => !document.querySelector('#view-browsers [data-open-all]').disabled);
     assert.equal(bulk.launch.created, 16, JSON.stringify(bulk.launch)); assert.equal(bulk.launch.reused, 0); assert.deepEqual(bulk.launch.failed, []);
     assert.equal(bulk.profileId, beforeBulk.profileId); assert.equal(bulk.tab.id, beforeBulk.tab.id);
     assert.equal(bulk.tabs.length, beforeBulk.tabs.length + 16);
     // The native state initially reports in-flight URLs as HOME, so wait for
     // actual navigation before checking one event window per profile.
-    await reopened.waitForFunction(async url => { const state = await desktopBridge.checkout(); return state.tabs.filter(tab => tab.url === url).length === 16 && state.tabs.filter(tab => tab.url === url).every(tab => !tab.loading); }, eventUrl);
-    const loaded = await reopened.evaluate(() => desktopBridge.checkout());
+    const loaded = await waitCheckout(reopened, state => state.tabs.filter(tab => tab.url === eventUrl).length === 16 && state.profiles.every(profile => state.tabs.filter(tab => tab.profileId === profile.id && tab.url === eventUrl && !tab.loading).length === 1));
     for (const profile of loaded.profiles) assert.equal(loaded.tabs.filter(tab => tab.profileId === profile.id && tab.url === eventUrl).length, 1, JSON.stringify({ profile, profiles: loaded.profiles, launch: loaded.launch, tabs: loaded.tabs.map(({ id, profileId, url, loading, error }) => ({ id, profileId, url, loading, error })) }));
     assert.equal(restoredSite.url(), 'http://127.0.0.1:8080/checkout.html');
     assert.equal(await restoredSite.locator('input[placeholder="Nome Completo"]').inputValue(), 'Carrinho preservado');
@@ -342,14 +353,14 @@ const root = path.resolve(__dirname, '../..');
     // Enter in the link field also launches; it must not submit the buyer form.
     await reopened.locator('.sidebar [data-view=buy]').click();
     await reopened.locator('#event-link').press('Enter');
-    await reopened.waitForFunction(async () => { const state = await desktopBridge.checkout(); return state.launch.created === 0 && state.launch.reused === 16 && !state.launch.running; });
+    await waitCheckout(reopened, state => state.launch.created === 0 && state.launch.reused === 16 && !state.launch.running);
     assert.deepEqual((await reopened.evaluate(() => desktopBridge.checkout())).tabs.map(tab => tab.id).sort(), loaded.tabs.map(tab => tab.id).sort());
     const advancedId = loaded.tabs.find(tab => tab.url === eventUrl && tab.profileId === selectedProfile).id;
     const advanced = await findWindow(advancedId);
     await advanced.goto('http://127.0.0.1:8080/checkout/carrinho-em-andamento');
     await advanced.locator('input[placeholder="Nome Completo"]').fill('Outro carrinho preservado');
     await reopened.locator('#view-buy [data-open-all]').click();
-    await reopened.waitForFunction(async () => { const state = await desktopBridge.checkout(); return state.launch.created === 1 && state.launch.reused === 15 && !state.launch.running; });
+    await waitCheckout(reopened, state => state.launch.created === 1 && state.launch.reused === 15 && !state.launch.running);
     assert.equal((await reopened.evaluate(() => desktopBridge.checkout())).tabs.length, loaded.tabs.length + 1);
     assert.equal(await advanced.locator('input[placeholder="Nome Completo"]').inputValue(), 'Outro carrinho preservado');
     assert.equal(advanced.url(), 'http://127.0.0.1:8080/checkout/carrinho-em-andamento');

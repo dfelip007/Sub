@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, protocol, Menu, session, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, protocol, Menu, session, dialog, shell } = require('electron');
 const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const path = require('node:path');
@@ -10,6 +10,7 @@ const { readCartTimer, freshTimer, OrderTimers } = require('./cart-timer.cjs');
 const { readQueuePage, QueueStatus, EventRoutes } = require('./queue-status.cjs');
 const { readTickets } = require('./ticket-reader.cjs');
 const { Instagram } = require('./instagram.cjs');
+const { AlertTracker } = require('./monitor.js');
 const CONTROL_URL = 'app://manager/popup.html';
 const WORLD = 1007;
 const smoke = !app.isPackaged && process.argv.includes('--smoke-test');
@@ -41,6 +42,8 @@ let storage;
 let quitting = false;
 let timerPoll;
 let instagram;
+const alerts = new AlertTracker();
+let soundTimer;
 let launch = { running: false, total: 0, processed: 0, created: 0, reused: 0, failed: [], failureDetails: [] };
 
 const ui = path.join(__dirname, 'ui');
@@ -54,9 +57,18 @@ function state() {
   const selected = activeWindow();
   const tabs = [...windows.values()].map(entry => ({ id: entry.window.webContents.id, profileId: entry.profileId, revision: entry.generation, url: entry.window.webContents.getURL() || HOME, loading: entry.window.webContents.isLoading(), error: entry.error, timer: cartTimer(entry), queue: queueStatus(entry) }));
   const tab = tabs.find(item => item.id === selected?.window.webContents.id) || null;
-  return { profiles: browsing.profiles, profileId: browsing.selected, tabs, tab, loading: tab?.loading || false, error: tab?.error || '', launch };
+  return { profiles: browsing.profiles, profileId: browsing.selected, tabs, tab, loading: tab?.loading || false, error: tab?.error || '', launch, monitor: browsing.monitor, alerts: alerts.recent };
 }
-function notify() { if (controller && !controller.isDestroyed()) controller.webContents.send('checkout:changed', state()); }
+function notify() {
+  if (!controller || controller.isDestroyed()) return;
+  const current = state(), emitted = alerts.update(current);
+  if (emitted.length && current.monitor.sound && !soundTimer) {
+    // Group simultaneous windows into one system sound; never raise/focus a window.
+    soundTimer = setTimeout(() => { soundTimer = null; if (!quitting && browsing.monitor.sound) { try { shell.beep(); } catch { /* Audio failure must not interrupt checkout. */ } } }, 400);
+  }
+  current.alerts = alerts.recent;
+  controller.webContents.send('checkout:changed', current);
+}
 function expire() { if (controller && !controller.isDestroyed()) controller.webContents.send('profiles:expired'); }
 function usageChanged() { if (controller && !controller.isDestroyed()) controller.webContents.send('usage:changed'); }
 function guard(event) {
@@ -217,6 +229,13 @@ function handlers() {
   handle('profiles:write', (area, values) => storage.update(area, values));
   handle('profiles:remove', (area, key) => storage.update(area, key, true));
   handle('checkout:state', () => state());
+  handle('monitor:configure', async patch => {
+    browsing = await workspace.configureMonitor(patch);
+    if (!browsing.monitor.sound) { clearTimeout(soundTimer); soundTimer = null; }
+    notify(); return state();
+  });
+  handle('monitor:clear', () => { alerts.clear(); notify(); return state(); });
+  handle('monitor:test-sound', () => { shell.beep(); return true; });
   handle('news:state', () => instagram.state());
   handle('news:configure', enabled => instagram.configure(enabled));
   handle('news:check', () => instagram.check());
@@ -298,7 +317,7 @@ function handlers() {
   });
 }
 async function start() {
-  const allowed = new Set(['popup.html', 'popup.css', 'dates.js', 'vault.js', 'wallet.js', 'tickets.js', 'import.js', 'fill.js', 'adapter.js', 'submundo.png']);
+  const allowed = new Set(['popup.html', 'popup.css', 'dates.js', 'vault.js', 'wallet.js', 'tickets.js', 'monitor.js', 'import.js', 'fill.js', 'adapter.js', 'submundo.png']);
   protocol.handle('app', async request => {
     const url = new URL(request.url);
     const name = url.pathname.slice(1);
@@ -339,5 +358,5 @@ else {
   app.on('second-instance', () => { if (controller && !controller.isDestroyed()) { controller.show(); controller.focus(); } });
   app.whenReady().then(start).catch(() => { console.error('Não foi possível iniciar o aplicativo. Nenhum dado de pagamento foi registrado no log.'); app.exit(1); });
 }
-app.on('before-quit', () => { quitting = true; clearInterval(timerPoll); instagram?.close(); storage?.close(); });
+app.on('before-quit', () => { quitting = true; clearInterval(timerPoll); clearTimeout(soundTimer); instagram?.close(); storage?.close(); });
 app.on('window-all-closed', () => app.quit());

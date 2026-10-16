@@ -24,6 +24,79 @@
   const ticketDrafts = new Map();
   const resaleDrafts = new Map();
   let newsState, newsPending = false, newsCooldown;
+  let monitor = SubmundoMonitor.settings(), monitorDirty = false, monitorRevision = 0, monitorTimer, monitorQueue = Promise.resolve();
+  function syncMonitor() {
+    for (const input of document.querySelectorAll('[data-monitor]')) {
+      const value = monitor[input.dataset.monitor];
+      if (input.type === 'checkbox') input.checked = value;
+      else if (input.value !== value) input.value = value;
+    }
+  }
+  function changeMonitor(patch) {
+    if (!state) { syncMonitor(); return; }
+    monitor = SubmundoMonitor.settings(patch, monitor); monitorDirty = true;
+    const revision = ++monitorRevision, requested = { ...monitor };
+    syncMonitor(); renderBrowser(); $('monitor-save').textContent = 'Salvando preferências…';
+    clearTimeout(monitorTimer);
+    monitorTimer = setTimeout(() => {
+      monitorQueue = monitorQueue.catch(() => {}).then(async () => {
+        if (revision !== monitorRevision) return;
+        try {
+          const next = await bridge.configureMonitor(requested);
+          if (revision !== monitorRevision) return;
+          state.monitor = next.monitor; monitor = next.monitor; monitorDirty = false; $('monitor-save').textContent = 'Preferências salvas.';
+        } catch {
+          if (revision !== monitorRevision) return;
+          monitorDirty = false; monitor = state.monitor; $('monitor-save').textContent = 'Não foi possível salvar. Preferências anteriores mantidas.';
+        }
+        syncMonitor(); renderBrowser();
+      });
+    }, Object.hasOwn(patch, 'search') ? 250 : 0);
+  }
+  function reorder(parent, rows) {
+    const focused = document.activeElement;
+    for (let index = rows.length - 1; index >= 0; index--) {
+      const row = rows[index], next = rows[index + 1] || null;
+      if (row.nextElementSibling === next) continue;
+      if (parent.moveBefore) parent.moveBefore(row, next); else parent.insertBefore(row, next);
+    }
+    if (focused !== document.activeElement && focused?.isConnected && focused.getClientRects().length && !focused.closest('[hidden]')) focused.focus({ preventScroll: true });
+  }
+  function applyMonitorFilters() {
+    const tabs = SubmundoMonitor.tabs(state, monitor), profiles = SubmundoMonitor.profiles(state, monitor);
+    for (const [kind, entries, selector, parent] of [['tabs', tabs, '[data-tab]', $('cart-list')], ['profiles', profiles, '[data-browser-profile]', $('browsers-list')]]) {
+      const visible = new Set(entries.map(item => String(item.id))), key = kind === 'tabs' ? 'tab' : 'browserProfile';
+      const rows = [...parent.querySelectorAll(selector)];
+      for (const row of rows) row.hidden = !visible.has(row.dataset[key]);
+      const byId = new Map(rows.map(row => [row.dataset[key], row]));
+      reorder(parent, [...entries.map(item => byId.get(String(item.id))).filter(Boolean), ...rows.filter(row => row.hidden)]);
+      document.querySelector(`[data-monitor-count="${kind}"]`).textContent = `${entries.length} de ${kind === 'tabs' ? state.tabs.length : state.profiles.length} ${kind === 'tabs' ? 'janelas' : 'perfis'} nos filtros`;
+      document.querySelector(`[data-monitor-empty="${kind}"]`).hidden = entries.length > 0;
+    }
+    const outside = state.tab && !tabs.some(tab => tab.id === state.tab.id);
+    for (const warning of document.querySelectorAll('[data-monitor-destination]')) {
+      warning.hidden = !outside;
+      if (outside) {
+        const profile = state.profiles.find(profile => profile.id === state.tab.profileId);
+        const number = state.tabs.filter(tab => tab.profileId === state.tab.profileId).findIndex(tab => tab.id === state.tab.id) + 1;
+        warning.textContent = `Destino atual: ${profile.label} · Janela ${number} (fora dos filtros). Filtrar a lista não muda a janela que receberá o preenchimento.`;
+      }
+    }
+  }
+  function renderAlerts() {
+    const recent = state.alerts || [], list = $('monitor-alert-list');
+    $('monitor-alerts').hidden = !recent.length;
+    const signature = JSON.stringify([recent, state.tabs.map(tab => tab.id)]);
+    if (list.dataset.alerts === signature) return;
+    list.dataset.alerts = signature; list.replaceChildren();
+    for (const alert of recent) {
+      const row = node('div', '', 'monitor-alert-row'), main = node('div');
+      main.append(node('strong', `${alert.profile} · Janela ${alert.windowNumber}`), node('p', `${alert.kind === 'ready' ? 'Página do evento disponível após a sala de espera.' : `Últimos dois minutos: ${clockText({ seconds: alert.seconds })} no momento do aviso.`} · ${dateTime(alert.at)}`));
+      row.append(main);
+      if (state.tabs.some(tab => tab.id === alert.tabId)) row.append(button('Selecionar janela', 'alertTab', alert.tabId));
+      list.append(row);
+    }
+  }
   function message(text, kind = 'success') { $('message').textContent = text; $('message').dataset.kind = kind; $('message').hidden = !text; }
   function node(tag, text, className = '') { const result = document.createElement(tag); result.textContent = text; if (className) result.className = className; return result; }
   function button(text, action, id, className = 'secondary') { const result = node('button', text, className); result.type = 'button'; result.dataset[action] = id; return result; }
@@ -214,6 +287,7 @@
   }
   function renderBrowser() {
     if (!state) return;
+    renderAlerts();
     options($('desktop-profile'), state.profiles.map(item => { const queue = profileQueue(item.id); return [`${item.label}${item.lastFilledAt ? ' · Utilizado' : ''}${queue.status !== 'unknown' ? ` · ${queue.text}` : ''}`, item.id]; }), state.profileId);
     const tabs = state.tabs.filter(item => item.profileId === state.profileId);
     options($('desktop-target'), tabs.length ? tabs.map((item, index) => [`Janela ${index + 1} · ${new URL(item.url).hostname || 'abrindo…'} · ${queueLabel(item.queue)}`, item.id]) : [['Abra a Meaple neste perfil', '']], state.tab?.id);
@@ -230,7 +304,7 @@
     for (const label of document.querySelectorAll('[data-launch-state]')) label.textContent = launchText;
     const list = $('browsers-list');
     const signature = JSON.stringify([state.profiles, state.profileId, state.tabs.map(item => [item.id, item.profileId])]);
-    if (list.dataset.structure === signature) { renderProfileQueues(); return; }
+    if (list.dataset.structure === signature) { renderProfileQueues(); applyMonitorFilters(); return; }
     list.dataset.structure = signature; list.replaceChildren();
     for (const profile of state.profiles) {
       const row = node('div', '', 'record-row'); const main = node('div', '', 'record-main');
@@ -246,6 +320,7 @@
       row.append(node('div', '▦', 'avatar'), main, actions); list.append(row);
     }
     renderProfileQueues();
+    applyMonitorFilters();
   }
   function renderProfiles() {
     const buyers = wallet.unlocked ? wallet.list('buyers') : [];
@@ -422,6 +497,7 @@
     if ($('ticket-dialog').open) $('ticket-dialog').close(); editTicketOrder = '';
     $('ticket-read-state').textContent = 'Desbloqueie o cofre para ler e salvar os ingressos.';
     for (const id of ['buyer-form', 'card-form', 'checkout', 'vault-form', 'pin-form']) $(id).reset();
+    syncMonitor();
     for (const input of document.querySelectorAll('[data-event-link]')) input.value = eventLink;
     for (const id of ['buyer-editor', 'card-editor']) $(id).hidden = true;
     $('import-data').value = ''; $('buyer-search').value = '';
@@ -469,6 +545,8 @@
   document.addEventListener('click', event => {
     const control = event.target.closest('button'); if (!control || control.disabled) return;
     if (control.dataset.view) navigate(control.dataset.view);
+    if (control.dataset.alertTab) void selectWindow(Number(control.dataset.alertTab));
+    if (control.hasAttribute('data-monitor-reset')) changeMonitor({ status: 'all', usage: 'all', search: '', sort: SubmundoMonitor.defaults.sort });
     if (control.dataset.clearProfileUse) {
       if (!globalThis.confirm('Limpar a marca Utilizado deste perfil? A utilização dos CPFs e o histórico de compras serão mantidos.')) return;
       void run(async () => { state = await bridge.clearBrowserUse(control.dataset.clearProfileUse, Number(control.dataset.usedAt)); }, 'Marcação do perfil removida.');
@@ -598,15 +676,21 @@
       event.preventDefault(); input.closest('.event-launch').querySelector('[data-open-all]').click();
     });
   }
-  $('cart-list').addEventListener('click', event => {
-    const control = event.target.closest('[data-cart-tab]');
-    if (!control) return;
-    const tab = state.tabs.find(item => item.id === Number(control.dataset.cartTab));
+  async function selectWindow(id) {
+    const tab = state.tabs.find(item => item.id === id);
     if (!tab) return;
-    void run(async () => {
+    await run(async () => {
       if (tab.profileId !== state.profileId) state = await bridge.selectBrowser(tab.profileId);
       state = await bridge.selectTab(tab.id); navigate('buy');
     });
+  }
+  for (const input of document.querySelectorAll('[data-monitor]')) input.addEventListener(input.type === 'search' ? 'input' : 'change', () => changeMonitor({ [input.dataset.monitor]: input.type === 'checkbox' ? input.checked : input.value }));
+  $('monitor-test').addEventListener('click', () => { void bridge.testSound().then(() => message('Som de teste solicitado. Se não ouviu, confira o volume do Windows.')).catch(() => message('Não foi possível reproduzir o som de teste.', 'error')); });
+  $('monitor-clear').addEventListener('click', () => { void bridge.clearAlerts().then(next => { state.alerts = next.alerts; renderAlerts(); }).catch(() => message('Não foi possível limpar os avisos.', 'error')); });
+  $('cart-list').addEventListener('click', event => {
+    const control = event.target.closest('[data-cart-tab]');
+    if (!control) return;
+    void selectWindow(Number(control.dataset.cartTab));
   });
   $('desktop-new-window').addEventListener('click', () => { void run(async () => { state = await bridge.open(true); navigate('buy'); }); });
   $('browser-form').addEventListener('submit', event => { event.preventDefault(); void run(async () => { state = await bridge.createBrowser($('desktop-label').value, Number($('desktop-quantity').value)); }, 'Perfis criados. Use um perfil da lista para abrir a Meaple.'); });
@@ -666,14 +750,14 @@
     finally { busy = false; render(); }
   });
   CheckoutDates.bind($('buyer-form').elements.birthDate, 'birth'); CheckoutDates.bind($('card-form').elements.cardExpiry, 'expiry');
-  bridge.onState(next => { state = next; renderBrowser(); controls(); });
+  bridge.onState(next => { state = next; if (!monitorDirty) monitor = SubmundoMonitor.settings(next.monitor); syncMonitor(); renderBrowser(); controls(); });
   bridge.onUsage(() => { void refreshUsage(); });
   bridge.onExpired(() => { void expire(); });
   void (async () => {
     try {
       const saved = await bridge.read('local', 'contact'); contact = saved.contact || contact;
       for (const field of ['email', 'phone']) $('contact-form').elements[field].value = contact[field];
-      state = await bridge.checkout(); await wallet.restore(); exists = Boolean(wallet.envelope); await refreshUsage(); render();
+      state = await bridge.checkout(); if (!monitorDirty) monitor = SubmundoMonitor.settings(state.monitor); syncMonitor(); await wallet.restore(); exists = Boolean(wallet.envelope); await refreshUsage(); render();
     } catch { message('Não foi possível carregar seus dados. Os arquivos foram preservados. Reinicie o programa.', 'error'); controls(); }
   })();
 })();

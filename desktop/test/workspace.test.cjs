@@ -112,3 +112,15 @@ test('recusa horário de perfil inválido sem apagar o arquivo nem inventar uma 
   await assert.rejects(workspace.init(), /preservado/);
   assert.equal(await fs.readFile(workspace.filename, 'utf8'), damaged);
 }));
+
+test('preferências de filtros e som persistem sem alterar seleção, CPF ou marcas dos perfis', () => fixture(async (workspace, directory) => {
+  const initial = await workspace.init(); assert.equal(initial.monitor.sound, false);
+  await workspace.markUsed('00000000000', initial.selected);
+  await workspace.markProfileFilled(initial.selected);
+  const saved = await workspace.configureMonitor({ sound: true, status: 'available', usage: 'unused', search: 'Perfil', sort: 'profile' });
+  assert.equal(saved.selected, initial.selected); assert.ok(saved.profiles[0].lastFilledAt);
+  const reopened = await new Workspace(directory).init(); assert.deepEqual(reopened.monitor, saved.monitor);
+  await assert.rejects(workspace.configureMonitor({ sound: 'sim' }), /inválidas/);
+  assert.deepEqual((await workspace.init()).monitor, saved.monitor);
+  assert.equal((await workspace.statuses(['00000000000']))[0].status, 'used');
+}));

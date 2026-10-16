@@ -6,7 +6,7 @@ A marca e a logo Submundo / 808 aparecem no painel e nos ícones do Windows. A i
 
 ## Usar e atualizar
 
-1. Feche a versão anterior e execute `Submundo-Compras-0.8.4-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados e o PIN das versões 0.4/0.5/0.6/0.7 permanecem no mesmo diretório. Para cofres das versões 0.1/0.2/0.3, use a senha existente uma vez, sem apagar o cofre, e depois defina seu PIN de 4 números em **Contato e ajustes → PIN do cofre**. Os cartões antigos começam sem limite informado e sem CVV salvo.
+1. Feche a versão anterior e execute `Submundo-Compras-0.9.0-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados e o PIN das versões 0.4/0.5/0.6/0.7 permanecem no mesmo diretório. Para cofres das versões 0.1/0.2/0.3, use a senha existente uma vez, sem apagar o cofre, e depois defina seu PIN de 4 números em **Contato e ajustes → PIN do cofre**. Os cartões antigos começam sem limite informado e sem CVV salvo.
 2. Desbloqueie o cofre com o PIN ou crie um PIN de exatamente 4 números no primeiro uso. Em **Contato e ajustes**, salve e-mail e telefone.
 3. Em **Compradores**, use **Novo comprador** para cadastrar nome, CPF e nascimento. Em **Cartões**, use **Novo cartão** para cadastrar número, titular, validade, endereço e limite disponível. A gravação de CVV é opcional por cartão: informe o código e marque **Salvar o CVV no cofre deste cartão**.
 4. Em **Perfis de navegação**, informe um prefixo e a quantidade (por exemplo, 15) e clique em **Criar perfis**. Você pode manter até 100 perfis, criando até 50 por vez. **Usar este perfil** abre a Meaple na sessão escolhida. Faça login, escolha ingressos e avance ao checkout.
@@ -41,6 +41,23 @@ Para cada perfil, o programa reaproveita uma janela que já esteja exatamente no
 A navegação começa imediatamente em pequenos grupos, com progresso no painel; a abertura de outros perfis não espera a conexão de cada site terminar. Ao concluir, o painel informa quantas janelas foram criadas/reaproveitadas e eventuais falhas ao criar janelas. O carregamento do site continua independentemente em cada sessão; aguarde-o antes de comprar. A abertura em lote aceita links HTTPS da Meaple/subdomínios, sem usuário/senha embutidos. A navegação de pagamento existente continua permitindo provedores HTTPS.
 
 O fluxo foi testado em Electron real com 16 perfis, sessões isoladas, cofre bloqueado, link inválido recusado, repetição sem duplicar, Enter no campo de link, carrinhos preservados e criação de uma nova janela para um perfil que já avançou no evento. O teste usa páginas locais fictícias; o carregamento do evento real depende da conexão e do acesso à Meaple.
+
+## Filtros e alertas
+
+Na **Visão geral** da tela Comprar e na lista de **Perfis de navegação**, use a busca pelo nome, o status e a utilização em conjunto. Por exemplo, **Disponíveis / no evento + Não utilizados** mostra somente os perfis que atendem às duas condições. Disponíveis inclui os estados Disponível, Liberado para o evento e Página do evento. **Até 2 minutos (ativos)** mostra prazos positivos de até 120 segundos; expirados aparecem nos demais filtros. A busca ignora maiúsculas e acentos. Os controles das duas telas ficam sincronizados, com contagem dos resultados e botão **Limpar filtros**.
+
+A ordenação inicial é **Menor tempo restante**: carrinhos ainda correndo vêm primeiro, do menor para o maior prazo; depois os expirados e os sem tempo identificado. Em perfis com várias janelas, usa o menor prazo correspondente ao filtro. Pode escolher **Ordem dos perfis**. Os filtros não fecham janelas, não alteram cookies nem mudam o destino de preenchimento. Os seletores de destino continuam contendo todos os perfis/janelas. Se o destino atual ficar oculto na lista, aparece um aviso explícito. **Abrir todos os perfis** continua abrindo todos os cadastrados, inclusive os ocultos por filtros.
+
+O quadro **Avisos de acompanhamento** mostra até 20 avisos recentes, com perfil, janela e horário de Brasília. **Selecionar janela** muda o destino por ação do usuário, sem preencher nem pagar. Janelas fechadas mantêm o registro visual, mas deixam de oferecer esse botão. O acompanhamento usa todas as janelas abertas, independentemente de filtro ou tela atual, inclusive com cofre bloqueado. Não traz janelas para frente automaticamente.
+
+- **Página do evento disponível após a sala de espera**: uma janela antes observada na espera passou a Disponível, Liberado ou Página do evento. Abrir um evento direto não gera aviso de saída da espera. A indicação continua sendo da página reconhecida, sem confirmar autorização no servidor.
+- **Últimos dois minutos**: um contador válido, inclusive a regra local de dez minutos em `/orders/`, ficou entre 1 e 120 segundos. O valor exibido no aviso é do momento da emissão; o contador da janela mostra o tempo atual. Não inventa prazo para janela sem contador reconhecido/regra aplicável e não emite um aviso de tempo restante quando já está em zero.
+
+O som começa desligado. Marque **Alertas sonoros** para habilitar o som de aviso do sistema e use **Testar som** para conferir o volume/saída do Windows. Funciona com o programa aberto, inclusive minimizado; não há serviço com aplicativo fechado. Som é opcional: os registros visuais continuam sendo gerados quando desligado. Ativar som não reproduz avisos antigos. Eventos simultâneos próximos são agrupados em um som.
+
+Não repete aviso de liberação para o mesmo evento/janela nesta execução. Não repete aviso de dois minutos para o mesmo pedido/perfil, mesmo em duas janelas do mesmo pedido, ou ao alternar entre leitura do site e contagem local; outras rotas de checkout usam identidade por janela. Pequenas oscilações do contador não rearmam o aviso. **Limpar avisos** remove só os registros visuais, sem rearmar sons. Ao reiniciar, o histórico de avisos e a deduplicação recomeçam: não restaura uma liberação antiga; um contador que já estiver nos últimos dois minutos pode gerar novo aviso.
+
+Filtro, busca, ordenação e preferência de som ficam em `workspace.json`, fora do cofre e sem dados financeiros. A interface informa **Salvando preferências… / Preferências salvas**; espere a confirmação antes de encerrar. Preferências são preservadas ao bloquear o cofre e reiniciar. Falha de gravação mantém as preferências anteriores. Testes usam páginas fictícias e verificam a solicitação nativa de som; a audição física depende da saída e volume do Windows.
 
 ## Sala de espera e acesso ao evento
 

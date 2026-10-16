@@ -2,6 +2,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { settings } = require('./monitor.js');
 
 // Browser sessions and a CPF ledger are independent of the erasable buyer/card vault.
 // CPFs are indexed using an installation-specific HMAC; no raw CPF/card goes here.
@@ -16,6 +17,7 @@ class Workspace {
       const data = JSON.parse(await fs.readFile(this.filename, 'utf8'));
       if (data.version !== 1 || !/^[a-f0-9]{64}$/.test(data.secret) || !Array.isArray(data.profiles) || !data.profiles.length || data.profiles.length > 100 || !data.profiles.some(profile => profile.id === data.selected) || !data.usage || typeof data.usage !== 'object' || Array.isArray(data.usage)) throw new Error('schema');
       const ids = new Set();
+      if (data.monitor !== undefined) settings(data.monitor);
       for (const profile of data.profiles) {
         if (!/^(legacy|[a-f0-9-]{36})$/.test(profile.id) || ids.has(profile.id) || typeof profile.label !== 'string' || !profile.label.trim() || profile.label.length > 80) throw new Error('schema');
         if (profile.lastFilledAt !== undefined && (!Number.isSafeInteger(profile.lastFilledAt) || profile.lastFilledAt <= 0)) throw new Error('schema');
@@ -46,7 +48,10 @@ class Workspace {
     this.queue = operation.catch(() => {});
     return operation;
   }
-  snapshot(data) { return { profiles: data.profiles, selected: data.selected }; }
+  snapshot(data) { return { profiles: data.profiles, selected: data.selected, monitor: settings(data.monitor) }; }
+  configureMonitor(patch) {
+    return this.transaction(data => { data.monitor = settings(patch, settings(data.monitor)); return this.snapshot(data); });
+  }
   init() { return this.transaction(data => this.snapshot(data)); }
   profile(data, id) {
     const profile = data.profiles.find(item => item.id === id);

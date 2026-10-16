@@ -1,10 +1,12 @@
-# Meaple Preenchimento — aplicativo Windows
+# Submundo Compras — aplicativo Windows
 
-Aplicativo independente, com painel central e vários perfis de navegação, cada um com cookies e login separados. A extensão não é necessária. O pagamento é finalizado manualmente no site.
+Aplicativo da Submundo para compras na Meaple, com painel central e vários perfis de navegação, cada um com cookies e login separados. A extensão não é necessária. O pagamento é finalizado manualmente no site.
+
+A marca e a logo Submundo / 808 aparecem no painel e nos ícones do Windows. A imagem foi preparada a partir da logo fornecida na conversa. A Meaple continua sendo o site de compra. A pasta histórica de dados `%APPDATA%\Meaple Preenchimento` e o identificador do aplicativo são mantidos para preservar os cadastros e as sessões das versões anteriores.
 
 ## Usar e atualizar
 
-1. Feche a versão anterior e execute `Meaple-Preenchimento-0.3.0-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados das versões 0.1/0.2 permanecem no mesmo diretório: use a senha existente, sem apagar o cofre. Os cartões antigos começam sem limite informado e sem CVV salvo.
+1. Feche a versão anterior e execute `Submundo-Compras-0.3.1-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados das versões 0.1/0.2/0.3 permanecem no mesmo diretório: use a senha existente, sem apagar o cofre. Os cartões antigos começam sem limite informado e sem CVV salvo.
 2. Desbloqueie o cofre ou crie uma senha no primeiro uso. Em **Contato e ajustes**, salve e-mail e telefone.
 3. Em **Compradores**, use **Novo comprador** para cadastrar nome, CPF e nascimento. Em **Cartões**, use **Novo cartão** para cadastrar número, titular, validade, endereço e limite disponível. A gravação de CVV é opcional por cartão: informe o código e marque **Salvar o CVV no cofre deste cartão**.
 4. Em **Perfis de navegação**, informe um prefixo e a quantidade (por exemplo, 15) e clique em **Criar perfis**. Você pode manter até 100 perfis, criando até 50 por vez. **Usar este perfil** abre a Meaple na sessão escolhida. Faça login, escolha ingressos e avance ao checkout.
@@ -49,7 +51,7 @@ Os dados selecionados são enviados somente ao formulário da Meaple quando o us
 ## Limites da validação
 
 - A versão foi testada em Electron real no Linux e no Windows, com painel, cofre, IPC, navegador próprio e formulário local equivalente aos prints. Inclui criação de 16 perfis, isolamento de cookies e localStorage entre perfis, compartilhamento entre janelas do mesmo perfil, escolha da janela de destino, horário por CPF duplicado, marcação/desmarcação manual, reinício do processo, persistência criptografada, CVV opcional com remoção ao desmarcar, limites, confirmação idempotente de compra, reversão, pendências após reiniciar, limpeza na expiração do cofre e preenchimento sem finalizar compra.
-- O workflow `.github/workflows/windows-desktop.yml` passou no Windows e gerou o artefato **Meaple-Windows-x64**, com executável e checksum. As execuções e os downloads ficam em https://github.com/dfelip007/Sub/actions/workflows/windows-desktop.yml. Escolha a execução bem-sucedida mais recente da versão 0.3. Entre no GitHub, abra a seção **Artifacts** no fim da página, baixe o pacote e extraia o ZIP. O teste completo usa Electron antes do empacotamento; o launcher portátil gerado não foi aberto separadamente pela automação.
+- O workflow `.github/workflows/windows-desktop.yml` passou no Windows e gerou o artefato **Submundo-Windows-x64**, com executável e checksum. As execuções e os downloads ficam em https://github.com/dfelip007/Sub/actions/workflows/windows-desktop.yml. Escolha a execução bem-sucedida mais recente da versão 0.3.1. Entre no GitHub, abra a seção **Artifacts** no fim da página, baixe o pacote e extraia o ZIP. O teste completo usa Electron antes do empacotamento; o launcher portátil gerado não foi aberto separadamente pela automação.
 - O checkout autenticado da Meaple, pagamento real e autenticação bancária não foram testados. O acesso à Meaple foi bloqueado pelo proxy do ambiente. O aplicativo usa uma sessão própria, e o site pode exigir novo login ou validação de acesso.
 - Campos em iframes de provedores de pagamento ainda exigem adaptação ao DOM real. A presença de iframe é indicada nas pendências.
 - O executável ainda não possui assinatura digital de distribuição. Não há certificado ou credencial embutidos.
@@ -81,14 +83,14 @@ npm run test:app
 
 No Linux, o teste precisa de um display gráfico ou Xvfb. Ele serve a demonstração em `127.0.0.1:8080`, abre um diretório temporário de dados e remove os dados fictícios ao terminar. A porta deve estar livre. O modo de demonstração só funciona no executável de desenvolvimento; o programa empacotado permite preencher somente HTTPS da Meaple e seus subdomínios.
 
-Para gerar o executável Windows:
+Para gerar o executável com ícone e metadados da Submundo, execute em Windows (ou use o workflow Windows do repositório):
 
 ```sh
 cd /workspace/Sub/desktop
 npm run build:win
 ```
 
-O resultado fica em `desktop/dist/`. O comando não publica arquivos. O instalador portátil contém um launcher NSIS de 32 bits e o aplicativo Electron x64; o alvo é Windows de 64 bits. Caches padrão funcionam no Windows. Neste ambiente Linux de arquivos restritos, utilize `XDG_CACHE_HOME=/tmp/sub-desktop-cache`, `ELECTRON_BUILDER_CACHE=/tmp/sub-electron-builder-cache` e a opção `--config.electronDownload.cache=/tmp/sub-electron-cache`.
+O resultado fica em `desktop/dist/`. A edição dos recursos de ícone do executável usa as ferramentas Windows do electron-builder; o ambiente Linux da nuvem não possui Wine e utiliza o GitHub Actions para essa geração. O comando não publica arquivos. O instalador portátil contém um launcher NSIS de 32 bits e o aplicativo Electron x64; o alvo é Windows de 64 bits. Caches padrão funcionam no Windows. Neste ambiente Linux de arquivos restritos, utilize `XDG_CACHE_HOME=/tmp/sub-desktop-cache`, `ELECTRON_BUILDER_CACHE=/tmp/sub-electron-builder-cache` e a opção `--config.electronDownload.cache=/tmp/sub-electron-cache`.
 
 O download do Electron para testes locais usa `ELECTRON_GET_USE_PROXY=1`, `NODE_USE_ENV_PROXY=1` e `electron_config_cache=/tmp/sub-electron-cache` quando o ambiente fornece proxy. O instalador verifica os checksums oficiais incluídos no pacote Electron. Verificação TLS e de artefatos deve permanecer habilitada.
 

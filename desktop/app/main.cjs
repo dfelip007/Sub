@@ -10,7 +10,7 @@ const CONTROL_URL = 'app://manager/popup.html';
 const WORLD = 1007;
 const smoke = !app.isPackaged && process.argv.includes('--smoke-test');
 const HOME = smoke ? 'http://127.0.0.1:8080/checkout.html' : 'https://meaple.com.br/';
-app.setName('Meaple Preenchimento');
+app.setName('Submundo Compras');
 if (smoke) {
   const argument = process.argv.find(value => value.startsWith('--test-data='));
   if (!argument) throw new Error('Diretório de teste obrigatório.');
@@ -18,6 +18,11 @@ if (smoke) {
   fsSync.mkdirSync(directory, { recursive: true, mode: 0o700 });
   app.setPath('userData', directory);
   app.disableHardwareAcceleration();
+} else {
+  // Keep the historical data directory when changing the public product name.
+  const directory = path.join(app.getPath('appData'), 'Meaple Preenchimento');
+  fsSync.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  app.setPath('userData', directory);
 }
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
 let controller;
@@ -165,19 +170,19 @@ function handlers() {
   });
 }
 async function start() {
-  const allowed = new Set(['popup.html', 'popup.css', 'dates.js', 'vault.js', 'wallet.js', 'import.js', 'fill.js', 'adapter.js']);
+  const allowed = new Set(['popup.html', 'popup.css', 'dates.js', 'vault.js', 'wallet.js', 'import.js', 'fill.js', 'adapter.js', 'submundo.png']);
   protocol.handle('app', async request => {
     const url = new URL(request.url);
     const name = url.pathname.slice(1);
     if (url.host !== 'manager' || !allowed.has(name)) return new Response('Não encontrado', { status: 404 });
-    const contentType = name.endsWith('.html') ? 'text/html; charset=utf-8' : name.endsWith('.css') ? 'text/css; charset=utf-8' : 'application/javascript; charset=utf-8';
+    const contentType = name.endsWith('.html') ? 'text/html; charset=utf-8' : name.endsWith('.css') ? 'text/css; charset=utf-8' : name.endsWith('.png') ? 'image/png' : 'application/javascript; charset=utf-8';
     return new Response(await fs.readFile(path.join(ui, name)), { headers: { 'Content-Type': contentType, 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'", 'X-Content-Type-Options': 'nosniff' } });
   });
   storage = new Store(path.join(app.getPath('userData'), 'profiles'), expire);
   workspace = new Workspace(path.join(app.getPath('userData'), 'profiles'));
   browsing = await workspace.init();
   handlers();
-  controller = new BrowserWindow({ title: 'Meaple — Assistente de compras', width: 1100, height: 900, minWidth: 760, minHeight: 640, show: false, backgroundColor: '#f4f6f9', webPreferences: { ...safeWeb, preload: path.join(__dirname, 'preload.cjs') } });
+  controller = new BrowserWindow({ title: 'Submundo — Assistente de compras', icon: path.join(__dirname, 'assets/submundo.png'), width: 1100, height: 900, minWidth: 760, minHeight: 640, show: false, backgroundColor: '#f4f6f9', webPreferences: { ...safeWeb, preload: path.join(__dirname, 'preload.cjs') } });
   controller.webContents.on('will-navigate', event => event.preventDefault());
   controller.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   controller.once('ready-to-show', () => { controller.show(); controller.focus(); });

@@ -47,7 +47,7 @@ jobs:
           }
       - uses: actions/upload-artifact@v4
         with:
-          name: Meaple-Windows-x64
+          name: Submundo-Windows-x64
           path: |
             desktop/dist/*.exe
             desktop/dist/*.sha256

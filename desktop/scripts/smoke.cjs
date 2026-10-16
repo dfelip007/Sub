@@ -34,6 +34,10 @@ const root = path.resolve(__dirname, '../..');
   try {
     instance = await launch();
     const panel = await getPanel(instance);
+    await panel.locator('.brand-logo').waitFor();
+    await panel.waitForFunction(() => { const image = document.querySelector('.brand-logo'); return image.complete && image.naturalWidth > 0; });
+    assert.match(await panel.title(), /Submundo/);
+    assert.equal(await instance.evaluate(({ app }) => app.getName()), 'Submundo Compras');
     panel.on('dialog', dialog => dialog.accept());
     const nav = async view => panel.locator(`.sidebar [data-view=${view}]`).click();
     await panel.waitForSelector('#vault-password');
@@ -230,7 +234,30 @@ const root = path.resolve(__dirname, '../..');
     await instance.evaluate(({ BrowserWindow }) => { const panel = BrowserWindow.getAllWindows().find(window => window.webContents.getURL().startsWith('app://')); panel.setSize(780, 760); });
     await reopened.waitForFunction(() => window.innerWidth < 800);
     assert.ok(await reopened.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-    console.log('PASS: Electron real: layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV.');
+    // Exercise the normal startup branch after rebranding with an existing vault.
+    // HTTPS is canceled in this test, so the production homepage is never contacted.
+    await instance.close();
+    const appData = path.join(directory, 'legacy-app-data');
+    const legacyUserData = path.join(appData, 'Meaple Preenchimento');
+    await fs.mkdir(legacyUserData, { recursive: true });
+    await fs.cp(path.join(directory, 'profiles'), path.join(legacyUserData, 'profiles'), { recursive: true });
+    const bootstrap = path.join(directory, 'branding-startup.cjs');
+    await fs.writeFile(bootstrap, `const { app } = require('electron');
+app.disableHardwareAcceleration();
+app.setPath('appData', ${JSON.stringify(appData)});
+app.on('web-contents-created', (_event, contents) => contents.session.webRequest.onBeforeRequest({ urls: ['https://*/*'] }, (_request, callback) => callback({ cancel: true })));
+require(${JSON.stringify(path.join(root, 'desktop/app/main.cjs'))});`);
+    instance = await _electron.launch({ executablePath: require('electron'), args: [bootstrap, '--no-sandbox'], env: { ...process.env, XDG_CACHE_HOME: '/tmp/sub-desktop-cache' }, timeout: 30000 });
+    const branded = await getPanel(instance);
+    assert.equal(await instance.evaluate(({ app }) => app.getName()), 'Submundo Compras');
+    assert.equal(await instance.evaluate(({ app }) => app.getPath('userData')), legacyUserData);
+    await branded.waitForFunction(() => document.querySelector('#vault-state').textContent === 'Cofre bloqueado');
+    await branded.locator('#vault-password').fill('senha-ficticia-teste');
+    await branded.locator('#vault-unlock').click();
+    await branded.waitForFunction(() => document.querySelector('#vault-panel').hidden);
+    await branded.locator('#card-profile').selectOption({ label: 'Principal · final 1111' });
+    assert.match(await branded.locator('#buy-balance').textContent(), /876,55/);
+    console.log('PASS: Electron real: layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores.');
   } catch (error) {
     const panel = instance?.windows().find(page => page.url() === 'app://manager/popup.html');
     if (panel) { await panel.screenshot({ path: path.join(root, 'test-results/desktop-error.png'), fullPage: true }).catch(() => {}); console.error('UI:', await panel.locator('#message').textContent().catch(() => '')); }

@@ -1,9 +1,9 @@
 {
   "name": "meaple-checkout-desktop",
-  "productName": "Meaple Preenchimento",
-  "version": "0.3.0",
+  "productName": "Submundo Compras",
+  "version": "0.3.1",
   "private": true,
-  "description": "Aplicativo independente para preencher o checkout da Meaple com perfis locais protegidos por senha.",
+  "description": "Submundo Compras: perfis locais, cofre e controle de limite para compras na Meaple.",
   "author": "dfelip007",
   "license": "UNLICENSED",
   "main": "app/main.cjs",
@@ -22,14 +22,15 @@
   },
   "build": {
     "appId": "com.dfelip007.meaplecheckout",
-    "productName": "Meaple Preenchimento",
+    "productName": "Submundo Compras",
     "asar": true,
     "files": ["app/**/*", "package.json"],
     "directories": { "output": "dist" },
-    "artifactName": "Meaple-Preenchimento-${version}-Windows-x64.${ext}",
+    "artifactName": "Submundo-Compras-${version}-Windows-x64.${ext}",
     "win": {
       "target": [{ "target": "portable", "arch": ["x64"] }],
-      "signAndEditExecutable": false
+      "signAndEditExecutable": true,
+      "icon": "app/assets/submundo.png"
     },
     "portable": { "requestExecutionLevel": "user" }
   }

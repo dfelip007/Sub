@@ -418,4 +418,13 @@ require(${JSON.stringify(path.join(root, 'desktop/app/main.cjs'))});`);
     await new Promise(resolve => server.close(resolve));
     await fs.rm(directory, { recursive: true, force: true });
   }
-})().catch(error => { console.error(error); process.exitCode = 1; });
+})().catch(error => {
+  console.error(error);
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    // This runner uses only synthetic data. Surface its failure location in the
+    // Actions annotation as well as the log so diagnostics remain reviewable.
+    const detail = String(error.stack || error).slice(0, 6000).replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A');
+    console.error(`::error title=Teste Electron::${detail}`);
+  }
+  process.exitCode = 1;
+});

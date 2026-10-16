@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Preencher checkout</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header><span class="badge">CHECKOUT RÁPIDO · 0.2</span><h1>Seu comprador.<br>Seu cartão. Um clique.</h1><p>Selecione os perfis, informe o CVV e preencha o checkout.</p></header>
+  <main>
+    <section id="vault-panel">
+      <div class="section-title"><h2>Cofre de perfis</h2><span id="vault-state">Carregando…</span></div>
+      <form id="vault-form" autocomplete="off" hidden>
+        <label>Senha do cofre<input id="vault-password" type="password" autocomplete="off" required></label>
+        <label id="vault-confirm-label">Repita a senha<input id="vault-confirm" type="password" autocomplete="off"></label>
+        <button id="vault-unlock" type="submit">Criar cofre</button>
+      </form>
+      <p id="vault-help" class="help">Compradores e cartões são salvos com criptografia neste navegador. E-mail e telefone continuam no contato fixo.</p>
+      <div class="actions"><button id="vault-lock" class="secondary" type="button" hidden>Bloquear agora</button><button id="vault-reset" class="text-button" type="button" hidden>Apagar cofre</button></div>
+      <p id="vault-message" role="status" aria-live="polite"></p>
+    </section>
+    <form id="checkout" autocomplete="off" novalidate>
+      <section id="quick-fill">
+        <div class="grid">
+          <label>Comprador<select id="buyer-profile" disabled><option value="">Novo comprador</option></select></label>
+          <label>Cartão<select id="card-profile" disabled><option value="">Novo cartão</option></select></label>
+        </div>
+        <div class="grid"><label>CVV desta compra<input name="cardCvv" type="password" required inputmode="numeric" maxlength="4" autocomplete="off"></label><label>Parcelas<select name="installments"><option value="">Manter na página</option><option value="1">1x</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option><option value="6">6x</option><option value="7">7x</option><option value="8">8x</option><option value="9">9x</option><option value="10">10x</option><option value="11">11x</option><option value="12">12x</option></select></label></div>
+        <button type="submit" id="fill">Preencher página agora</button>
+        <p class="notice">✓ Seguro: “Não preciso da proteção”. Revise e finalize no site.</p>
+        <p id="status" role="status" aria-live="polite"></p><ul id="details"></ul>
+      </section>
+      <section>
+        <details id="contact-editor" class="manage"><summary>Configurar contato fixo</summary>
+        <div class="grid">
+          <label>E-mail<input name="email" type="email" required autocomplete="off"></label>
+          <label>Telefone com DDD<input name="phone" type="tel" required placeholder="11 99999-9999" inputmode="tel"></label>
+        </div>
+        <div class="actions"><button type="button" id="save-contact" class="secondary">Salvar contato</button><button type="button" id="forget-contact" class="text-button">Apagar contato salvo</button></div>
+        </details>
+      </section>
+      <section>
+        <details id="buyer-editor" class="manage"><summary>Cadastrar ou editar comprador</summary>
+        <div class="profile-controls">
+          <label>Nome do perfil<input id="buyer-label" placeholder="Ex.: Daniel" maxlength="80" disabled></label>
+          <div class="actions"><button id="buyer-save" type="button" class="secondary" disabled>Salvar comprador</button><button id="buyer-new" type="button" class="text-button" disabled>Novo</button><button id="buyer-delete" type="button" class="text-button" disabled>Excluir</button></div>
+        </div>
+        <details class="import"><summary>Colar dados da compra de uma vez</summary><p>Uma informação por linha. Exemplo: Nome: Pessoa de Teste, CPF: …, Titular: …, Cartão: …, Validade: …, CVV: …, Nascimento: …, CEP: …, Cidade: …, Estado: …, Rua: …, Número: …, Parcelas: …</p><label>Dados para importar<textarea id="import-data" rows="6" autocomplete="off" placeholder="Nome: Pessoa de Teste&#10;CPF: 000.000.000-00&#10;Nascimento: 01/02/1990"></textarea></label><button type="button" id="import" class="secondary">Usar dados colados</button><p>O texto é apagado após a importação. E-mail e telefone continuam fixos.</p></details>
+        <label>Nome completo<input name="buyerName" required></label>
+        <div class="grid"><label>CPF<input name="cpf" required inputmode="numeric" placeholder="000.000.000-00"></label><label>Nascimento<input name="birthDate" required placeholder="dd/mm/aaaa" inputmode="numeric" maxlength="10"></label></div>
+        </details>
+      </section>
+      <section>
+        <details id="card-editor" class="manage"><summary>Cadastrar ou editar cartão e endereço</summary>
+        <div class="profile-controls">
+          <label>Nome do cartão<input id="card-label" placeholder="Ex.: Cartão principal" maxlength="80" disabled></label>
+          <div class="actions"><button id="card-save" type="button" class="secondary" disabled>Salvar cartão e endereço</button><button id="card-new" type="button" class="text-button" disabled>Novo</button><button id="card-delete" type="button" class="text-button" disabled>Excluir</button></div>
+        </div>
+        <div class="grid"><label>Número do cartão<input name="cardNumber" type="password" required inputmode="numeric" autocomplete="off"></label><label>Nome do titular<input name="cardHolder" required autocomplete="off"></label></div>
+        <label>Validade<input name="cardExpiry" required placeholder="MM/AA" inputmode="numeric" autocomplete="off"></label>
+        <h2>Endereço de cobrança</h2>
+        <div class="grid"><label>País<input name="country" value="Brasil" required></label><label>CEP<input name="postalCode" required placeholder="00000-000" inputmode="numeric"></label></div>
+        <div class="grid"><label>Cidade<input name="city" required></label><label>Estado (UF)<input name="state" required maxlength="2" placeholder="SP"></label></div>
+        <div class="grid street"><label>Rua<input name="street" required></label><label>Número<input name="streetNumber" required></label></div>
+        </details>
+      </section>
+      <footer><button type="button" id="clear" class="secondary">Limpar esta compra</button></footer>
+    </form>
+  </main>
+  <script src="dates.js"></script>
+  <script src="vault.js"></script>
+  <script src="import.js"></script>
+  <script src="popup.js"></script>
+  <script src="profiles.js"></script>
+</body>
+</html>

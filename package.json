@@ -1,0 +1,16 @@
+{
+  "name": "sub-checkout-assistant",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Extensão local para preenchimento de checkout de ingressos",
+  "scripts": {
+    "test": "node --test test/*.test.cjs",
+    "demo": "python3 -m http.server 8080 --bind 127.0.0.1 --directory demo",
+    "check": "node --check src/fill.js && node --check src/import.js && node --check src/popup.js && node --check src/dates.js && node --check src/vault.js && node --check src/profiles.js",
+    "test:browser": "node test/browser-smoke.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0",
+    "playwright-core": "1.56.1"
+  }
+}

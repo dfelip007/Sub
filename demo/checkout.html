@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Demonstração local — checkout</title>
+<style>body{font:16px system-ui;background:#171821;color:#fff;max-width:720px;margin:32px auto;padding:20px}section{padding:24px;background:#0d0e14;margin:18px 0;border-radius:10px}h2{margin:0 0 16px}label{display:block;margin:12px 0}input:not([type=radio]),select{display:block;box-sizing:border-box;width:100%;padding:12px;margin:6px 0;background:#181821;color:white;border:1px solid #353348;border-radius:6px}button{padding:12px;border:0;border-radius:6px;background:#00aaff;color:#001424;font-weight:bold}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.warning{color:#ffe197}#result{color:#8df0bd}</style></head>
+<body>
+<h1>Checkout de demonstração</h1><p class="warning">Página fictícia para testar a extensão. Use somente dados fictícios. Não há pagamento nem envio de dados.</p>
+<form id="checkout">
+<section><h2>Dados do Comprador</h2>
+<label>Nome Completo *<input required placeholder="Nome Completo"></label>
+<label>CPF *<input required placeholder="Digite o CPF..."></label>
+<label>E-mail *<input required type="email" placeholder="E-mail"></label>
+<label>Telefone *<input required placeholder="Digite o telefone..."></label>
+<label>Data de Nascimento *<input required placeholder="dd/mm/aaaa"></label>
+</section>
+<section><h2>Seguro dos Ingressos</h2>
+<label><input type="radio" name="insurance" value="yes" checked> Sim, quero garantir meus ingressos com proteção por apenas R$ 9,60</label>
+<label><input type="radio" name="insurance" value="no"> Não preciso da proteção (ciente dos riscos)</label>
+</section>
+<section><h2>Método de pagamento</h2>
+<button type="button" id="credit">Cartão de Crédito</button>
+<div class="grid"><label>Número do cartão *<input placeholder="1234 1234 1234 1234"></label><label>Nome do titular *<input placeholder="Nome do titular..."></label></div>
+<div class="grid"><label>Validade *<input placeholder="MM/AA"></label><label>CVV *<input placeholder="CVV"></label></div>
+<label>Parcelas<select><option value="">Selecione uma parcela...</option><option value="1">1x de R$ 100,00 sem juros</option><option value="2">2x de R$ 50,00</option></select></label>
+<h2>Endereço de cobrança</h2>
+<div class="grid"><label>País *<select><option value="">Selecione o país...</option><option value="BR">Brasil</option></select></label><label>CEP *<input placeholder="00.000-000"></label></div>
+<div class="grid"><label>Cidade *<input placeholder="Digite a cidade..."></label><label>Estado *<select><option value="">Selecione o estado...</option><option value="SP">São Paulo</option><option value="RJ">Rio de Janeiro</option></select></label></div>
+<div class="grid"><label>Rua *<input placeholder="Digite sua rua..."></label><label>Número *<input placeholder="Digite o número..."></label></div>
+<button type="submit" id="finish">Finalizar compra (demonstração)</button>
+</section>
+</form><p id="result" role="status"></p>
+<script src="demo.js"></script>
+</body></html>

@@ -1,0 +1,36 @@
+{
+  "name": "meaple-checkout-desktop",
+  "productName": "Meaple Preenchimento",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aplicativo independente para preencher o checkout da Meaple com perfis locais protegidos por senha.",
+  "author": "dfelip007",
+  "license": "UNLICENSED",
+  "main": "app/main.cjs",
+  "scripts": {
+    "prepare:app": "node scripts/prepare.cjs",
+    "start": "npm run prepare:app && electron .",
+    "test": "node --test test/*.test.cjs",
+    "check": "node --check app/main.cjs && node --check app/preload.cjs && node --check app/store.cjs && node --check app/policy.cjs && node --check app/adapter.js",
+    "build:win": "npm run prepare:app && electron-builder --win portable --x64 --publish never",
+    "build:linux:test": "npm run prepare:app && electron-builder --linux dir --x64",
+    "test:app": "node scripts/smoke.cjs"
+  },
+  "devDependencies": {
+    "electron": "44.7.2",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.dfelip007.meaplecheckout",
+    "productName": "Meaple Preenchimento",
+    "asar": true,
+    "files": ["app/**/*", "package.json"],
+    "directories": { "output": "dist" },
+    "artifactName": "Meaple-Preenchimento-${version}-Windows-x64.${ext}",
+    "win": {
+      "target": [{ "target": "portable", "arch": ["x64"] }],
+      "signAndEditExecutable": false
+    },
+    "portable": { "requestExecutionLevel": "user" }
+  }
+}

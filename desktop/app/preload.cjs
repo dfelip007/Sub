@@ -5,6 +5,11 @@ contextBridge.exposeInMainWorld('desktopBridge', {
   write: (area, values) => ipcRenderer.invoke('profiles:write', area, values),
   remove: (area, key) => ipcRenderer.invoke('profiles:remove', area, key),
   checkout: () => ipcRenderer.invoke('checkout:state'),
+  news: () => ipcRenderer.invoke('news:state'),
+  configureNews: enabled => ipcRenderer.invoke('news:configure', enabled),
+  checkNews: () => ipcRenderer.invoke('news:check'),
+  readNews: () => ipcRenderer.invoke('news:read'),
+  openNews: (username, kind = 'profile', key = '') => ipcRenderer.invoke('news:open', username, kind, key),
   tickets: tabId => ipcRenderer.invoke('checkout:tickets', tabId),
   exportTickets: csv => ipcRenderer.invoke('tickets:export', csv),
   open: (newWindow = false) => ipcRenderer.invoke('checkout:open', newWindow),
@@ -20,6 +25,7 @@ contextBridge.exposeInMainWorld('desktopBridge', {
   prepare: tabId => ipcRenderer.invoke('checkout:prepare', tabId),
   fill: (tabId, data) => ipcRenderer.invoke('checkout:fill', tabId, data),
   onState: callback => { ipcRenderer.on('checkout:changed', (_event, state) => callback(state)); },
+  onNews: callback => { ipcRenderer.on('news:changed', (_event, state) => callback(state)); },
   onUsage: callback => { ipcRenderer.on('usage:changed', () => callback()); },
   onExpired: callback => { ipcRenderer.on('profiles:expired', () => callback()); }
 });

@@ -11,7 +11,16 @@ const root = path.resolve(__dirname, '../..');
   const ticketSummary = '<aside id="ticket-summary"><h2>Resumo da compra</h2><p>Evento: Submundo teste</p><article><h3>Pista inteira</h3><p class="fixture-lot">1º lote</p><p>Quantidade: 2</p><p>Valor unitário: R$ 50,00</p></article><article><h3>Pista meia</h3><p>2º lote</p><p>Quantidade: 1</p><p>Valor unitário: R$ 10,00</p></article><p>Taxas: R$ 13,45</p><p>Total: R$ 123,45</p></aside>';
   const fixture = (await fs.readFile(path.join(root, 'demo/checkout.html'), 'utf8')).replace('<form id="checkout">', `<aside id="cart-deadline">Seu carrinho expira em <strong id="cart-counter">09:58</strong></aside>${ticketSummary}<form id="checkout">`);
   const demoScript = await fs.readFile(path.join(root, 'demo/demo.js'));
+  const newsFixtures = { festivalsubmundo808: { posts: ['BASEfestival'], story: '', login: false }, submundo808: { posts: ['BASEbrand'], story: '', login: false } };
   const server = http.createServer((request, response) => {
+    const pathname = new URL(request.url, 'http://127.0.0.1:8080').pathname;
+    const username = pathname.split('/')[1];
+    if (newsFixtures[username]) {
+      response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.setHeader('Cache-Control', 'no-store');
+      const data = newsFixtures[username];
+      response.end(data.login ? '<h1>Entrar no Instagram fictício</h1><input type="password">' : `<main><header><h2>${username}</h2></header><article>${data.posts.map(id => `<a href="https://www.instagram.com/p/${id}/">Publicação fictícia ${id}</a>`).join('')}</article><a href="https://www.instagram.com/stories/${username}/">Stories</a>${data.story ? `<a href="https://www.instagram.com/stories/${username}/${data.story}/">Story específico</a>` : ''}</main>`); return;
+    }
+    if (/^\/(stories|p|reel)\//.test(pathname)) { response.setHeader('Content-Type', 'text/html; charset=utf-8'); response.end('<h1>Instagram fictício — conteúdo</h1>'); return; }
     response.setHeader('Content-Type', request.url === '/demo.js' ? 'application/javascript' : 'text/html; charset=utf-8');
     response.end(request.url === '/demo.js' ? demoScript : fixture);
   });
@@ -44,6 +53,29 @@ const root = path.resolve(__dirname, '../..');
     }
     throw new Error(`Estado do checkout não ficou pronto: ${JSON.stringify({ launch: state?.launch, tabs: state?.tabs })}`);
   }
+  async function waitNews(page, predicate) {
+    const deadline = Date.now() + 45000; let state;
+    while (Date.now() < deadline) {
+      state = await page.evaluate(() => desktopBridge.news());
+      if (predicate(state)) return state;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error(`Novidades não ficaram prontas: ${JSON.stringify(state)}`);
+  }
+  async function newsViewer(app, url) {
+    const deadline = Date.now() + 15000;
+    while (Date.now() < deadline) {
+      for (const page of app.windows()) {
+        if (page.isClosed() || page.url() !== url) continue;
+        try {
+          const handle = await app.browserWindow(page);
+          if (await handle.evaluate(window => window.isVisible())) { await page.waitForLoadState(); return page; }
+        } catch { /* A hidden reader can close while its page is being detached. */ }
+      }
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    throw new Error('Visualizador do Instagram não abriu.');
+  }
   try {
     instance = await launch();
     const panel = await getPanel(instance);
@@ -61,6 +93,46 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await instance.evaluate(({ app }) => app.getName()), 'Submundo Compras');
     panel.on('dialog', dialog => dialog.accept());
     const nav = async view => panel.locator(`.sidebar [data-view=${view}]`).click();
+    // News works independently of the vault and the Meaple browser sessions.
+    await nav('news');
+    await panel.waitForFunction(() => document.querySelectorAll('.news-profile').length === 2);
+    assert.equal(await panel.locator('#news-enabled').isChecked(), false);
+    await panel.locator('#news-check').click();
+    const baselineNews = await waitNews(panel, state => !state.busy && state.profiles.every(profile => profile.status === 'ok'));
+    assert.equal(baselineNews.profiles.reduce((sum, profile) => sum + profile.unread, 0), 0);
+    newsFixtures.festivalsubmundo808.posts.unshift('NEWPOST'); newsFixtures.festivalsubmundo808.story = '123456789';
+    await panel.locator('#news-check').click();
+    const updatedNews = await waitNews(panel, state => !state.busy && state.profiles[0].unread === 2);
+    assert.equal(updatedNews.profiles[1].unread, 0);
+    await panel.waitForFunction(() => document.querySelector('#news-badge').textContent === '2');
+    assert.match(await panel.locator('[data-news-profile=festivalsubmundo808]').textContent(), /Story.*não lido/);
+    await panel.locator('[data-news-profile=festivalsubmundo808] [data-news-kind=profile]').click();
+    const instagramPage = await newsViewer(instance, 'http://127.0.0.1:8080/festivalsubmundo808/');
+    assert.equal(await instagramPage.evaluate(() => typeof desktopBridge), 'undefined');
+    assert.equal(await instagramPage.evaluate(() => typeof require), 'undefined');
+    const igHandle = await instance.browserWindow(instagramPage); const igId = await igHandle.evaluate(window => window.webContents.id);
+    await assert.rejects(panel.evaluate(id => desktopBridge.prepare(id), igId), /checkout da Meaple/);
+    await instagramPage.evaluate(() => { document.cookie = 'instagram_test=onlynews; path=/; max-age=3600'; });
+    assert.equal(await site.evaluate(() => document.cookie.includes('instagram_test')), false);
+    await panel.locator('[data-news-profile=festivalsubmundo808] [data-news-kind=stories]').click();
+    await instagramPage.waitForURL('http://127.0.0.1:8080/stories/festivalsubmundo808/');
+    await panel.locator('#news-check').click();
+    await waitNews(panel, state => !state.busy && state.profiles.every(profile => profile.status === 'ok'));
+    assert.equal(instagramPage.url(), 'http://127.0.0.1:8080/stories/festivalsubmundo808/', 'Consulta não interrompe o story aberto pelo usuário.');
+    await panel.screenshot({ path: path.join(root, 'test-results/desktop-news.png'), fullPage: true });
+    const lastSuccess = (await panel.evaluate(() => desktopBridge.news())).profiles[0].lastSuccess;
+    newsFixtures.festivalsubmundo808.login = true;
+    await panel.locator('#news-enabled').check();
+    const loginNews = await waitNews(panel, state => state.enabled && !state.busy && state.profiles[0].status === 'login');
+    assert.equal(loginNews.profiles[0].lastSuccess, lastSuccess); assert.equal(loginNews.profiles[0].items.length, 3);
+    await panel.waitForFunction(() => document.querySelector('[data-news-profile=festivalsubmundo808]').textContent.includes('pediu login'));
+    await panel.locator('#news-enabled').uncheck();
+    await waitNews(panel, state => !state.enabled && !state.busy);
+    await panel.locator('#news-read').click();
+    await waitNews(panel, state => state.profiles.every(profile => profile.unread === 0));
+    await assert.rejects(panel.evaluate(() => desktopBridge.openNews('other')), /não permitido/);
+    await instagramPage.close();
+    await nav('buy');
     await panel.waitForSelector('#vault-password');
     await panel.locator('#vault-password').fill('0042');
     assert.equal(await panel.locator('#vault-password').getAttribute('maxlength'), '4');
@@ -275,6 +347,8 @@ const root = path.resolve(__dirname, '../..');
     assert.equal((await panel.locator('#cards-list').textContent()).includes('1111'), false);
     await instance.close(); instance = await launch();
     const reopened = await getPanel(instance); reopened.on('dialog', dialog => dialog.accept());
+    const persistedNews = await reopened.evaluate(() => desktopBridge.news());
+    assert.equal(persistedNews.enabled, false); assert.equal(persistedNews.profiles[0].items.length, 3); assert.equal(persistedNews.profiles[0].unread, 0);
     await reopened.waitForFunction(() => document.querySelector('#vault-state').textContent === 'Cofre bloqueado');
     assert.equal(await reopened.locator('#buyer-profile').isDisabled(), true);
     await reopened.locator('#vault-password').fill('0042');
@@ -422,7 +496,7 @@ require(${JSON.stringify(path.join(root, 'desktop/app/main.cjs'))});`);
     await branded.locator('.sidebar [data-view=buy]').click();
     await branded.locator('#card-profile').selectOption({ label: 'Principal · final 1111' });
     assert.match(await branded.locator('#buy-balance').textContent(), /876,55/);
-    console.log('PASS: Electron real: abrir evento nos 16 perfis com cofre bloqueado, link validado, cookies isolados, seleção/carrinhos preservados, repetição sem duplicar e Enter sem preencher; leitura de evento, lotes, quantidade, valores e total; estoque apenas após pagamento registrado; rateio exato, preço de revenda e CSV sem cartão/CPF; edição de lote preserva limite; rascunhos isolados por janela e persistência criptografada após reiniciar; contador automático por janela com cofre bloqueado, atualização, urgência, expiração, ausência, navegação, exclusão de provedor externo, seleção e fechamento; layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores; PIN com zero à esquerda e migração da senha antiga sem perda de dados.');
+    console.log('PASS: Electron real: novidades com primeira referência sem alerta, novo post/story identificado, avisos locais, login sem apagar último sucesso, pausa, histórico após reiniciar e cookies Instagram separados da Meaple; consulta não interrompe o story aberto; abrir evento nos 16 perfis com cofre bloqueado, link validado, cookies isolados, seleção/carrinhos preservados, repetição sem duplicar e Enter sem preencher; leitura de evento, lotes, quantidade, valores e total; estoque apenas após pagamento registrado; rateio exato, preço de revenda e CSV sem cartão/CPF; edição de lote preserva limite; rascunhos isolados por janela e persistência criptografada após reiniciar; contador automático por janela com cofre bloqueado, atualização, urgência, expiração, ausência, navegação, exclusão de provedor externo, seleção e fechamento; layout com navegação; 16 perfis; sessões isoladas; destino correto; 16 campos + seguro sem pagar; CPF com horário; CVV opcional criptografado; limite sem débito ao preencher, confirmação única, correção, pendências após reiniciar e remoção do CVV; identidade Submundo preserva o diretório e o cofre anteriores; PIN com zero à esquerda e migração da senha antiga sem perda de dados.');
   } catch (error) {
     const panel = instance?.windows().find(page => page.url() === 'app://manager/popup.html');
     if (panel) { await panel.screenshot({ path: path.join(root, 'test-results/desktop-error.png'), fullPage: true }).catch(() => {}); console.error('UI:', await panel.locator('#message').textContent().catch(() => '')); }

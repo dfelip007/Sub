@@ -12,6 +12,7 @@
     browsers: ['Cada login no seu lugar.', 'Vários perfis de navegação, sem instalar extensões.'],
     history: ['Tudo o que foi registrado.', 'Confirme pagamentos e acompanhe o limite de cada cartão.'],
     tickets: ['Ingressos prontos para organizar.', 'Lotes, custos e preço desejado para revenda em um só lugar.'],
+    news: ['Fique por dentro da Submundo.', 'Acompanhe os perfis oficiais e confira os conteúdos encontrados.'],
     settings: ['Do seu jeito.', 'Contato fixo, importação e configurações do cofre.']
   };
   const dateTime = value => new Date(value).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
@@ -22,6 +23,7 @@
   let draftKey = '', ticketRequest = 0, ticketDirty = false, amountDirty = false, requestedKey = '', editTicketOrder = '';
   const ticketDrafts = new Map();
   const resaleDrafts = new Map();
+  let newsState, newsPending = false, newsCooldown;
   function message(text, kind = 'success') { $('message').textContent = text; $('message').dataset.kind = kind; $('message').hidden = !text; }
   function node(tag, text, className = '') { const result = document.createElement(tag); result.textContent = text; if (className) result.className = className; return result; }
   function button(text, action, id, className = 'secondary') { const result = node('button', text, className); result.type = 'button'; result.dataset[action] = id; return result; }
@@ -37,6 +39,7 @@
     for (const section of document.querySelectorAll('.view')) section.hidden = section.id !== `view-${view}`;
     for (const control of document.querySelectorAll('.sidebar [data-view]')) { if (control.dataset.view === view) control.setAttribute('aria-current', 'page'); else control.removeAttribute('aria-current'); }
     [$('page-title').textContent, $('page-subtitle').textContent] = titles[view];
+    $('vault-panel').hidden = wallet.unlocked || view === 'news';
     window.scrollTo({ top: 0 });
   }
   function controls() {
@@ -54,6 +57,61 @@
     $('desktop-used').disabled = working || !selectedBuyer();
     for (const input of document.querySelectorAll('[data-event-link]')) input.disabled = working;
     for (const control of document.querySelectorAll('[data-open-all]')) control.disabled = working || !state?.profiles.length;
+    newsControls();
+  }
+  function newsControls() {
+    const working = busy || Boolean(state?.launch?.running);
+    const pending = newsPending || newsState?.busy;
+    $('news-enabled').disabled = working || !newsState || Boolean(newsState.error) || newsPending && !newsState.enabled;
+    $('news-check').disabled = working || pending || !newsState || Boolean(newsState.error) || Date.now() < (newsState.nextCheckAt || 0);
+    $('news-check').textContent = newsState?.busy ? 'Verificando…' : 'Verificar agora';
+    $('news-read').disabled = working || pending || !newsState || Boolean(newsState.error);
+    for (const control of document.querySelectorAll('[data-news-open]')) control.disabled = working;
+  }
+  async function newsAction(action, concurrent = false) {
+    if (newsPending && !concurrent) return;
+    if (!concurrent) newsPending = true;
+    newsControls(); $('news-message').hidden = true;
+    try { newsState = await action(); renderNews(); }
+    catch (error) { $('news-message').textContent = String(error.message || 'Não foi possível consultar as novidades.').replace(/^Error invoking remote method '[^']+': Error: /, ''); $('news-message').hidden = false; }
+    finally { if (!concurrent) newsPending = false; newsControls(); }
+  }
+  function renderNews() {
+    if (!newsState) return;
+    const unread = newsState.profiles.reduce((sum, profile) => sum + profile.unread, 0);
+    $('news-badge').textContent = unread; $('news-badge').hidden = !unread;
+    $('news-shortcut').textContent = `Novidades · ${unread}`; $('news-shortcut').classList.toggle('has-news', unread > 0);
+    $('news-shortcut').setAttribute('aria-label', `Novidades da Submundo: ${unread} itens não lidos`);
+    $('news-enabled').checked = newsState.enabled;
+    $('news-mode').textContent = newsState.busy ? 'Verificando os perfis…' : newsState.enabled ? 'Automático · a cada 5 min' : 'Acompanhamento pausado';
+    if (newsState.error) { $('news-message').textContent = newsState.error; $('news-message').hidden = false; }
+    const list = $('news-profiles'); list.replaceChildren();
+    const status = { idle: 'Ainda não verificado.', ok: 'Leitura concluída. Confira abaixo o que foi identificado.', login: 'O Instagram pediu login. Abra o perfil para entrar e depois verifique novamente.', unavailable: 'Não foi possível confirmar novidades nesta leitura. Abra o perfil para conferir.', outside: 'O Instagram redirecionou o acesso. Abra o perfil para conferir.' };
+    const types = { post: 'Publicação', reel: 'Reel', story: 'Story' };
+    for (const profile of newsState.profiles) {
+      const card = node('article', '', 'surface news-profile'); card.dataset.newsProfile = profile.username;
+      const heading = node('div', '', 'section-heading'); heading.append(node('h2', `@${profile.username}`), node('span', `${profile.unread} não lidos`, profile.unread ? 'tag used' : 'tag'));
+      const actions = node('div', '', 'actions');
+      for (const [title, kind] of [['Abrir perfil / entrar', 'profile'], ['Ver stories', 'stories']]) { const control = button(title, 'newsOpen', profile.username, 'secondary'); control.dataset.newsKind = kind; actions.append(control); }
+      card.append(heading, actions, node('p', status[profile.status] || status.unavailable, `news-status ${profile.status === 'ok' ? '' : 'uncertain'}`), node('p', profile.lastSuccess ? `Última leitura confirmada: ${dateTime(profile.lastSuccess)}` : 'Sem leitura confirmada ainda.', 'hint'));
+      if (profile.lastAttempt && profile.lastAttempt !== profile.lastSuccess) card.append(node('p', `Última tentativa: ${dateTime(profile.lastAttempt)}. Os itens anteriores podem estar desatualizados.`, 'hint'));
+      card.append(node('p', profile.story === 'identified' ? 'Story específico identificado na última leitura. Confira se ainda está disponível.' : 'Stories: sem confirmação automática nesta leitura. Use Ver stories.', 'hint'));
+      const feed = node('div', '', 'news-feed');
+      for (const item of profile.items.slice(0, 12)) {
+        const row = node('div', '', 'news-item'); row.dataset.newsKey = item.key;
+        const readLabel = item.kind === 'post' ? item.seen ? 'lida' : 'não lida' : item.seen ? 'lido' : 'não lido';
+        const text = node('div'); text.append(node('strong', `${types[item.kind]} · ${readLabel}`), node('p', `Detectado em ${dateTime(item.detectedAt)}`, 'hint'));
+        if (item.kind === 'story') text.append(node('p', 'O story pode ter expirado.', 'hint'));
+        const control = button('Ver no Instagram ↗', 'newsOpen', profile.username, 'text-button'); control.dataset.newsKind = item.kind; control.dataset.newsKey = item.key;
+        row.append(text, control); feed.append(row);
+      }
+      if (!profile.items.length) empty(feed, profile.initialized ? 'Nenhum conteúdo identificável na última leitura.' : 'Aguardando a primeira leitura.', 'Consulte o perfil no Instagram se a leitura não estiver disponível.');
+      card.append(feed); list.append(card);
+    }
+    clearTimeout(newsCooldown);
+    const remaining = (newsState.nextCheckAt || 0) - Date.now();
+    if (remaining > 0) newsCooldown = setTimeout(newsControls, remaining + 50);
+    newsControls();
   }
   async function run(action, success = '') {
     if (busy) return;
@@ -73,7 +131,7 @@
     const unlocked = wallet.unlocked;
     $('vault-state').textContent = unlocked ? '● Cofre desbloqueado · 30 min' : exists ? 'Cofre bloqueado' : 'Crie seu cofre';
     $('vault-state').classList.toggle('locked', !unlocked);
-    $('vault-panel').hidden = unlocked;
+    $('vault-panel').hidden = unlocked || currentView === 'news';
     $('vault-lock').hidden = !unlocked;
     $('vault-reset').hidden = !exists;
     $('vault-title').textContent = exists ? 'Bem-vindo de volta.' : 'Tudo começa pelo seu cofre.';
@@ -337,7 +395,7 @@
     $('order-form').reset(); activeOrderId = '';
   }
   async function expire() {
-    await lock(); render(); message('Cofre bloqueado. Desbloqueie para continuar.');
+    await lock(); render(); message(currentView === 'news' ? 'Cofre bloqueado. As novidades continuam disponíveis.' : 'Cofre bloqueado. Desbloqueie para continuar.');
   }
   function editor(kind, id = '') {
     if (!wallet.unlocked) { message('Desbloqueie o cofre para editar cadastros.', 'error'); return; }
@@ -377,6 +435,7 @@
   document.addEventListener('click', event => {
     const control = event.target.closest('button'); if (!control || control.disabled) return;
     if (control.dataset.view) navigate(control.dataset.view);
+    if (control.dataset.newsOpen) void newsAction(() => bridge.openNews(control.dataset.newsOpen, control.dataset.newsKind, control.dataset.newsKey || ''), true);
     if (control.hasAttribute('data-open-all')) void run(async () => {
       state = await bridge.openAll($('event-link').value);
       const failed = state.launch.failed;
@@ -487,6 +546,11 @@
   $('desktop-profile').addEventListener('change', () => { void run(async () => { state = await bridge.selectBrowser($('desktop-profile').value); }); });
   $('desktop-target').addEventListener('change', () => { void run(async () => { state = await bridge.selectTab(Number($('desktop-target').value)); }); });
   $('desktop-open').addEventListener('click', () => { void run(async () => { state = await bridge.open(); }); });
+  $('news-enabled').addEventListener('change', () => { const enabled = $('news-enabled').checked; void newsAction(() => bridge.configureNews(enabled), true); });
+  $('news-check').addEventListener('click', () => { void newsAction(() => bridge.checkNews()); });
+  $('news-read').addEventListener('click', () => { void newsAction(() => bridge.readNews()); });
+  bridge.onNews(next => { newsState = next; renderNews(); });
+  void bridge.news().then(next => { newsState = next; renderNews(); }).catch(() => { $('news-message').textContent = 'Não foi possível carregar as novidades. Os demais recursos continuam disponíveis.'; $('news-message').hidden = false; });
   for (const input of document.querySelectorAll('[data-event-link]')) {
     input.addEventListener('input', () => {
       for (const other of document.querySelectorAll('[data-event-link]')) if (other !== input) other.value = input.value;

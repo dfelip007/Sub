@@ -8,6 +8,7 @@ const { Workspace, partition } = require('./workspace.cjs');
 const { canFill, canNavigate, validateValues, eventUrl } = require('./policy.cjs');
 const { readCartTimer, freshTimer } = require('./cart-timer.cjs');
 const { readTickets } = require('./ticket-reader.cjs');
+const { Instagram } = require('./instagram.cjs');
 const CONTROL_URL = 'app://manager/popup.html';
 const WORLD = 1007;
 const smoke = !app.isPackaged && process.argv.includes('--smoke-test');
@@ -36,6 +37,7 @@ let browsing;
 let storage;
 let quitting = false;
 let timerPoll;
+let instagram;
 let launch = { running: false, total: 0, processed: 0, created: 0, reused: 0, failed: [], failureDetails: [] };
 
 const ui = path.join(__dirname, 'ui');
@@ -192,6 +194,11 @@ function handlers() {
   handle('profiles:write', (area, values) => storage.update(area, values));
   handle('profiles:remove', (area, key) => storage.update(area, key, true));
   handle('checkout:state', () => state());
+  handle('news:state', () => instagram.state());
+  handle('news:configure', enabled => instagram.configure(enabled));
+  handle('news:check', () => instagram.check());
+  handle('news:read', () => instagram.markRead());
+  handle('news:open', (username, kind, key) => instagram.open(username, kind, key));
   handle('tickets:export', async csv => {
     if (typeof csv !== 'string' || csv.length > 4 * 1024 * 1024) throw new Error('Arquivo de ingressos inválido.');
     const result = await dialog.showSaveDialog(controller, { title: 'Exportar ingressos para revenda', defaultPath: 'Submundo-ingressos.csv', filters: [{ name: 'Planilha CSV', extensions: ['csv'] }] });
@@ -269,6 +276,7 @@ async function start() {
   storage = new Store(path.join(app.getPath('userData'), 'profiles'), expire);
   workspace = new Workspace(path.join(app.getPath('userData'), 'profiles'));
   browsing = await workspace.init();
+  instagram = new Instagram({ directory: path.join(app.getPath('userData'), 'profiles'), BrowserWindow, session, webPreferences: safeWeb, smoke, changed: next => { if (controller && !controller.isDestroyed()) controller.webContents.send('news:changed', next); } });
   handlers();
   controller = new BrowserWindow({ title: 'Submundo — Assistente de compras', icon: path.join(__dirname, 'assets/submundo.png'), width: 1100, height: 900, minWidth: 760, minHeight: 640, show: false, backgroundColor: '#f4f6f9', webPreferences: { ...safeWeb, preload: path.join(__dirname, 'preload.cjs') } });
   controller.webContents.on('will-navigate', event => event.preventDefault());
@@ -290,11 +298,12 @@ async function start() {
   }, 1000);
   timerPoll.unref();
   openCheckout();
+  await instagram.init();
 }
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', () => { if (controller && !controller.isDestroyed()) { controller.show(); controller.focus(); } });
   app.whenReady().then(start).catch(() => { console.error('Não foi possível iniciar o aplicativo. Nenhum dado de pagamento foi registrado no log.'); app.exit(1); });
 }
-app.on('before-quit', () => { quitting = true; clearInterval(timerPoll); storage?.close(); });
+app.on('before-quit', () => { quitting = true; clearInterval(timerPoll); instagram?.close(); storage?.close(); });
 app.on('window-all-closed', () => app.quit());

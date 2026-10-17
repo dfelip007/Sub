@@ -15,13 +15,15 @@ async function main() {
   const remaining = new Set(expected);
   for (const entry of asar.listPackage(archive)) {
     const name = entry.replace(/^[/\\]/, '').replaceAll('\\', '/');
-    const stat = asar.statFile(archive, name, false);
+    // ASAR traverses directories using the host separator, including on Windows.
+    const archiveName = path.normalize(name);
+    const stat = asar.statFile(archive, archiveName, false);
     if (stat.files) continue;
     if (stat.link || stat.unpacked) throw new Error(`Entrada inesperada no aplicativo: ${name}`);
     if (name === 'package.json') continue;
     if (!expected.has(name)) throw new Error(`Arquivo não autorizado no pacote: ${name}`);
     const source = await fs.readFile(path.join(root, name));
-    if (!asar.extractFile(archive, name).equals(source)) throw new Error(`Arquivo do aplicativo diverge do código preparado: ${name}`);
+    if (!asar.extractFile(archive, archiveName).equals(source)) throw new Error(`Arquivo do aplicativo diverge do código preparado: ${name}`);
     remaining.delete(name);
   }
   if (remaining.size) throw new Error(`Funcionalidades ausentes no pacote: ${[...remaining].join(', ')}`);
@@ -71,4 +73,8 @@ O funcionamento do site e do Instagram depende da conexão e das páginas atuais
   console.log(`Pacote para compartilhar preparado: ${expected.size} arquivos do aplicativo conferidos, executável e checksum verificados. Apenas EXE, SHA256 e LEIA-ME no ZIP.`);
 }
 
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+main().catch(error => {
+  const message = String(error.message);
+  console.error(process.env.GITHUB_ACTIONS ? `::error::${message.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A')}` : message);
+  process.exitCode = 1;
+});

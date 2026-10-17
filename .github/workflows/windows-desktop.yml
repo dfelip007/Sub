@@ -34,6 +34,9 @@ jobs:
       - run: node scripts/ci-run.cjs npm test
       - run: node ../scripts/ci-run.cjs npm ci --no-audit --no-fund
         working-directory: desktop
+      - name: Instalar e verificar binário Electron
+        run: node ../scripts/ci-run.cjs node node_modules/electron/install.js
+        working-directory: desktop
       - run: node ../scripts/ci-run.cjs npm test
         working-directory: desktop
       - run: node ../scripts/ci-run.cjs npm run prepare:app

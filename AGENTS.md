@@ -33,7 +33,7 @@ Use o checkout/pasta existente. Cada tarefa na nuvem já é isolada; não crie w
 
 ## Verificação
 
-Node.js 24. Dependências travadas pelos dois `package-lock.json`. Na raiz: `npm ci --ignore-scripts --no-audit --no-fund`, `npm test`, `npm run check`. Em `desktop/`: `npm ci --no-audit --no-fund`, `npm test`, `npm run prepare:app`, `npm run check`, `npm run test:app`.
+Node.js 24. Dependências travadas pelos dois `package-lock.json`. Na raiz: `npm ci --ignore-scripts --no-audit --no-fund`, `npm test`, `npm run check`. Em `desktop/`: `npm ci --no-audit --no-fund`, `node node_modules/electron/install.js`, `npm test`, `npm run prepare:app`, `npm run check`, `npm run test:app`. Electron 44 pode baixar o binário somente no primeiro uso; o comando explícito permite verificar essa etapa antes do teste.
 
 O teste Electron precisa de display gráfico (ou Xvfb no Linux) e da porta 8080 livre. Ele cria suas próprias páginas e dados temporários; não execute a demonstração ao mesmo tempo. Não use dados reais para testes. `npm start` comum usa os dados normais do usuário; o guia de desenvolvimento descreve o modo separado de demonstração.
 

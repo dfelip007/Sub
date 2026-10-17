@@ -170,6 +170,7 @@ cd /workspace/Sub
 npm ci --ignore-scripts --no-audit --no-fund
 cd desktop
 npm ci --no-audit --no-fund
+node node_modules/electron/install.js
 npm test
 npm run prepare:app
 npm run check

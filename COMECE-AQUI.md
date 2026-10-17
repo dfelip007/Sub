@@ -50,6 +50,7 @@ npm ci --ignore-scripts --no-audit --no-fund
 npm test
 cd desktop
 npm ci --no-audit --no-fund
+node node_modules/electron/install.js
 npm test
 npm run prepare:app
 npm run check

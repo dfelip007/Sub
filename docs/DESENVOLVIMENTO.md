@@ -16,12 +16,21 @@ npm test
 npm run check
 cd desktop
 npm ci --no-audit --no-fund
+node node_modules/electron/install.js
 npm test
 npm run prepare:app
 npm run check
 ```
 
-`npm ci` exige os lockfiles incluídos. O desktop precisa do script de instalação do Electron para baixar seu binário; não usar `--ignore-scripts` nessa instalação normal. Internet é necessária para npm/Electron, mas nenhum segredo do remetente é necessário. Se o ambiente de nuvem exigir proxy/permissão de rede, use as configurações fornecidas por esse ambiente, sem desativar TLS ou checksums.
+`npm ci` exige os lockfiles incluídos. Na versão 44, o pacote Electron pode adiar o download do binário até o primeiro uso. `node node_modules/electron/install.js` antecipa e verifica esse download com os checksums oficiais; repeti-lo é seguro se a instalação já estiver pronta. Internet é necessária para npm/Electron, mas nenhum segredo do remetente é necessário. Se o ambiente de nuvem exigir proxy/permissão de rede, use as configurações fornecidas por esse ambiente, sem desativar TLS ou checksums.
+
+Em ambientes Linux que fornecem proxy pelas variáveis padrão, este comando foi validado para o download (em `desktop/`):
+
+```sh
+ELECTRON_GET_USE_PROXY=1 NODE_USE_ENV_PROXY=1 electron_config_cache=/tmp/sub-electron-cache node node_modules/electron/install.js
+```
+
+Essas opções não são credenciais e não são necessárias no Windows com conexão direta. Uma falha de download não comprova defeito do aplicativo; confira acesso a npm/GitHub, proxy e a presença do binário antes de executar o smoke.
 
 ## Abrir e testar
 

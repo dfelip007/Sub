@@ -1,5 +1,7 @@
 # Submundo Compras — aplicativo Windows
 
+Para trabalhar com o código em outro Codex, leia [COMECE-AQUI.md](../COMECE-AQUI.md), [arquitetura](../docs/ARQUITETURA.md), [requisitos](../docs/REQUISITOS-E-DECISOES.md) e [desenvolvimento](../docs/DESENVOLVIMENTO.md). O workflow também entrega **Submundo-Codigo-Fonte-Codex** e **Submundo-Projeto-Completo-Windows-x64**, com documentação e fontes da revisão identificada, sem dados de usuários.
+
 Aplicativo da Submundo para compras na Meaple, com painel central e vários perfis de navegação, cada um com cookies e login separados. A extensão não é necessária. O pagamento é finalizado manualmente no site.
 
 A marca e a logo Submundo / 808 aparecem no painel e nos ícones do Windows. A imagem foi preparada a partir da logo fornecida na conversa. A Meaple continua sendo o site de compra. A pasta histórica de dados `%APPDATA%\Meaple Preenchimento` e o identificador do aplicativo são mantidos para preservar os cadastros e as sessões das versões anteriores.
@@ -154,7 +156,7 @@ Os dados selecionados são enviados somente ao formulário da Meaple quando o us
 ## Limites da validação
 
 - A versão foi testada em Electron real no Linux e no Windows, com painel, cofre, IPC, navegador próprio e formulário local equivalente aos prints. Inclui criação de 16 perfis, isolamento de cookies e localStorage entre perfis, compartilhamento entre janelas do mesmo perfil, escolha da janela de destino, horário por CPF duplicado, marcação/desmarcação manual, reinício do processo, persistência criptografada, CVV opcional com remoção ao desmarcar, limites, confirmação idempotente de compra, reversão, pendências após reiniciar, limpeza na expiração do cofre e preenchimento sem finalizar compra.
-- O workflow `.github/workflows/windows-desktop.yml` testa no Windows e gera o artefato **Submundo-Windows-x64**, com executável e checksum. As execuções e os downloads ficam em https://github.com/dfelip007/Sub/actions/workflows/windows-desktop.yml. Escolha a execução bem-sucedida mais recente da versão 0.8. Entre no GitHub, abra a seção **Artifacts** no fim da página, baixe o pacote e extraia o ZIP. O teste completo usa Electron antes do empacotamento; o launcher portátil gerado não foi aberto separadamente pela automação.
+- O workflow `.github/workflows/windows-desktop.yml` testa no Windows e gera o artefato **Submundo-Windows-x64**, com executável e checksum, além dos pacotes de código-fonte e projeto completo. As execuções e os downloads ficam em https://github.com/dfelip007/Sub/actions/workflows/windows-desktop.yml. Escolha a execução bem-sucedida da revisão/versão desejada. Entre no GitHub, abra a seção **Artifacts** no fim da página, baixe o pacote e extraia o ZIP. O teste completo usa Electron antes do empacotamento; o launcher portátil gerado não foi aberto separadamente pela automação.
 - O checkout autenticado da Meaple, pagamento real e autenticação bancária não foram testados. O acesso à Meaple foi bloqueado pelo proxy do ambiente. O aplicativo usa uma sessão própria, e o site pode exigir novo login ou validação de acesso.
 - Campos em iframes de provedores de pagamento ainda exigem adaptação ao DOM real. A presença de iframe é indicada nas pendências.
 - O executável ainda não possui assinatura digital de distribuição. Não há certificado ou credencial embutidos.

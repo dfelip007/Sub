@@ -4,7 +4,7 @@
 
 - Node.js **24** e npm. O CI usa Windows e Node 24.
 - Windows 10/11 x64 para o programa pronto e para compilar o EXE com os recursos de ícone/metadados. Electron **44.7.2** e electron-builder **26.15.3** estão travados no lockfile desktop.
-- Git para versionamento/Actions/exportação identificada de fontes; não é obrigatório para rodar o código extraído ou compilar o EXE localmente.
+- Git para a suíte de testes de exportação, versionamento/Actions e exportação identificada de fontes; não é obrigatório para abrir o aplicativo a partir do código extraído ou compilar apenas o EXE localmente.
 - Python 3 é opcional para a demonstração manual/extensão histórica. O smoke desktop serve suas próprias páginas com Node.
 - Linux: bibliotecas gráficas necessárias ao Electron e display gráfico ou Xvfb. A geração Windows preservando recursos usa um runner Windows; não desative edição de ícone para contornar falta de Wine.
 
@@ -74,6 +74,8 @@ Use somente dados fictícios. Esse diretório manual permanece para a próxima s
 Antes da documentação de transferência, havia 22 testes na raiz e 62 desktop. O pacote/CI desta entrega registra os resultados atuais; novos testes de empacotamento podem aumentar a contagem. Zero testes executados não é validação. O smoke também produz capturas em `test-results/`, que não vão para os pacotes.
 
 Os testes de checkout/fila/Instagram são fictícios e não garantem compatibilidade com mudanças dos sites. Em Playwright 1.56.1, espere IPC assíncrono por polling Node, conforme `waitCheckout`/`waitNews`, sem predicate async em `waitForFunction`.
+
+Observação dos ensaios de transferência em Linux/Xvfb: algumas execuções deram timeout em `locator.click` no botão `data-cart-tab` após reabrir a Visão geral; outras completaram com o mesmo código da aplicação, incluindo execuções com instrumentação temporária para diagnóstico. A causa dessa intermitência não foi confirmada e não foi aplicada correção no produto nem removida a asserção. Os testes Windows desta entrega completaram. Se ocorrer, capture `details.open`, foco, retângulos/visibilidade do botão e estado dos filtros antes da captura de tela; os logs e `test-results/desktop-error.png` ajudam a investigar. Não confunda esse resultado com validação ou falha de uma compra real.
 
 ## Compilar o aplicativo Windows
 

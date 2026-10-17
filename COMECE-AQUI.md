@@ -24,7 +24,7 @@ O pacote contém código, logo, documentação, testes e arquivos de compilaçã
 
 No Codex com acesso a arquivos, extraia e abra a pasta do projeto que contém `package.json` e `AGENTS.md`. Se a interface aceitar anexos ZIP, use preferencialmente o pacote de código-fonte. No Codex em nuvem conectado ao GitHub, crie um repositório com esses arquivos ou faça um fork do repositório original e selecione a revisão/branch indicada em `ENTREGA.json`.
 
-O código funciona sem histórico Git. Git só é necessário para versionar alterações, usar GitHub Actions ou gerar novos pacotes de entrega com identificação de commit. O ZIP não inclui `.git`, credenciais ou configurações privadas do ambiente que o produziu.
+O código funciona sem histórico Git. Instale Git para executar os testes de exportação, versionar alterações, usar GitHub Actions ou gerar novos pacotes de entrega com identificação de commit. O ZIP não inclui `.git`, credenciais ou configurações privadas do ambiente que o produziu.
 
 Prompt inicial sugerido:
 
@@ -43,7 +43,7 @@ Implemente, execute os testes pertinentes e explique o resultado.
 
 ## Executar e modificar o código
 
-Instale **Node.js 24 com npm**. Na pasta do projeto, em PowerShell ou outro terminal:
+Instale **Node.js 24 com npm** e **Git** para a suíte de testes. Na pasta do projeto, em PowerShell ou outro terminal:
 
 ```sh
 npm ci --ignore-scripts --no-audit --no-fund

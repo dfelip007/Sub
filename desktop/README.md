@@ -6,6 +6,8 @@ A marca e a logo Submundo / 808 aparecem no painel e nos ícones do Windows. A i
 
 ## Usar e atualizar
 
+Para compartilhar com outra pessoa, baixe o ZIP **Submundo-Windows-x64** nos artefatos da compilação Windows no GitHub Actions. Ele contém somente o executável, seu SHA256 e o guia `LEIA-ME.txt`. A compilação confere os arquivos do aplicativo e preserva todas as funcionalidades; nenhum cadastro, cartão, CVV, contato, PIN, histórico ou sessão do remetente é incluído. Não envie a pasta `%APPDATA%\Meaple Preenchimento`. O destinatário extrai o ZIP e cadastra seus próprios dados; se já usava o programa naquele usuário Windows, seus dados existentes são preservados.
+
 1. Feche a versão anterior e execute `Submundo-Compras-0.9.0-Windows-x64.exe` no Windows 10/11 de 64 bits. O arquivo portátil não exige instalação como administrador. Os dados e o PIN das versões 0.4/0.5/0.6/0.7 permanecem no mesmo diretório. Para cofres das versões 0.1/0.2/0.3, use a senha existente uma vez, sem apagar o cofre, e depois defina seu PIN de 4 números em **Contato e ajustes → PIN do cofre**. Os cartões antigos começam sem limite informado e sem CVV salvo.
 2. Desbloqueie o cofre com o PIN ou crie um PIN de exatamente 4 números no primeiro uso. Em **Contato e ajustes**, salve e-mail e telefone.
 3. Em **Compradores**, use **Novo comprador** para cadastrar nome, CPF e nascimento. Em **Cartões**, use **Novo cartão** para cadastrar número, titular, validade, endereço e limite disponível. A gravação de CVV é opcional por cartão: informe o código e marque **Salvar o CVV no cofre deste cartão**.

@@ -45,11 +45,13 @@ jobs:
             $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             "$hash  $($_.Name)" | Set-Content -Encoding ascii -LiteralPath ($_.FullName + '.sha256')
           }
+      - name: Conferir aplicativo e preparar ZIP sem cadastros
+        run: node ../scripts/ci-run.cjs node scripts/share.cjs
+        working-directory: desktop
       - uses: actions/upload-artifact@v4
         with:
           name: Submundo-Windows-x64
           path: |
-            desktop/dist/*.exe
-            desktop/dist/*.sha256
+            desktop/dist/share/*
           if-no-files-found: error
           retention-days: 14
